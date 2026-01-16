@@ -123,7 +123,8 @@ class DealFinder:
         title = item.get("title", "")
         price_str = item.get("price", "")
         source = item.get("source", "Unknown")
-        link = item.get("link", "")
+        # SerpAPI uses 'product_link' for the actual retailer URL, 'link' is often a Google redirect
+        link = item.get("product_link") or item.get("link", "")
         thumbnail = item.get("thumbnail", "")
 
         # Skip eBay results
