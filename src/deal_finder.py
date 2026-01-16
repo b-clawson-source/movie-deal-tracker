@@ -31,6 +31,7 @@ class Deal:
     url: str
     similarity_score: float
     matched_example: str
+    thumbnail: str = ""
     found_at: str = ""
 
     def __post_init__(self):
@@ -123,6 +124,7 @@ class DealFinder:
         price_str = item.get("price", "")
         source = item.get("source", "Unknown")
         link = item.get("link", "")
+        thumbnail = item.get("thumbnail", "")
 
         # Extract price
         price = self._extract_price(price_str)
@@ -148,6 +150,7 @@ class DealFinder:
             url=link,
             similarity_score=confidence,
             matched_example=description,
+            thumbnail=thumbnail,
         )
 
     def _extract_price(self, price_str: str) -> Optional[float]:
