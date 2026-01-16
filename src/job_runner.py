@@ -49,14 +49,13 @@ class JobRunner:
         """Create edition classifier."""
         return EditionClassifier()
 
-    def _create_finder_for_subscriber(self, subscriber: Subscriber, deep_search: bool = False) -> DealFinder:
+    def _create_finder_for_subscriber(self, subscriber: Subscriber) -> DealFinder:
         """Create deal finder with subscriber's max_price preference."""
         return DealFinder(
             api_key=self.serpapi_key,
             classifier=self.classifier,
             max_price=subscriber.max_price,
             requests_per_minute=self.config["search"]["requests_per_minute"],
-            deep_search=deep_search,
         )
 
     def _is_due_for_check(self, subscriber: Subscriber) -> bool:
@@ -90,18 +89,16 @@ class JobRunner:
 
         return EmailNotifier(api_key=api_key, from_email=from_email)
 
-    def run_all_subscribers(self, force: bool = False, resend: bool = False, deep: bool = False):
+    def run_all_subscribers(self, force: bool = False, resend: bool = False):
         """Process all active subscribers.
 
         Args:
             force: If True, bypass frequency check and process all subscribers
             resend: If True, send all deals (not just new ones)
-            deep: If True, use deep search mode (more queries, slower)
         """
         self._resend_mode = resend
-        self._deep_mode = deep
         subscribers = self.db.get_active_subscribers()
-        logger.info(f"Processing {len(subscribers)} active subscribers (force={force}, resend={resend}, deep={deep})")
+        logger.info(f"Processing {len(subscribers)} active subscribers (force={force}, resend={resend})")
 
         processed = 0
         skipped = 0
@@ -138,8 +135,7 @@ class JobRunner:
             return
 
         # Create finder with subscriber's price preference
-        deep = getattr(self, '_deep_mode', False)
-        finder = self._create_finder_for_subscriber(subscriber, deep_search=deep)
+        finder = self._create_finder_for_subscriber(subscriber)
 
         # Search for deals
         all_deals = finder.find_deals(movies)

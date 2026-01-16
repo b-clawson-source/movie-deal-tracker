@@ -49,95 +49,54 @@ class Deal:
 class DealFinder:
     """Searches for movie deals using SerpAPI."""
 
-    # Boutique labels for deep search targeted queries
-    BOUTIQUE_LABELS = [
-        "Criterion",
-        "Arrow Video",
-        "Vinegar Syndrome",
-        "Shout Factory",
-        "Kino Lorber",
-        "Indicator",
-        "Eureka",
-        "88 Films",
-        "Severin",
-        "Blue Underground",
-    ]
-
     def __init__(
         self,
         api_key: str,
         classifier: EditionClassifier,
         max_price: float = 20.0,
         requests_per_minute: int = 30,
-        deep_search: bool = False,
     ):
         self.api_key = api_key
         self.classifier = classifier
         self.max_price = max_price
         self.request_delay = 60.0 / requests_per_minute
-        self.deep_search = deep_search
 
     def search_movie(self, movie: Movie) -> List[Deal]:
         """Search for deals on a specific movie."""
-        seen_hashes = set()
         deals = []
 
-        # Build search queries (multiple if deep search)
-        queries = self._build_queries(movie)
+        # Build search query
+        query = self._build_query(movie)
+        logger.info(f"Searching: {query}")
 
-        for query in queries:
-            logger.info(f"Searching: {query}")
-            try:
-                results = self._execute_search(query)
-                new_deals = self._process_results(movie, results)
+        try:
+            results = self._execute_search(query)
+            deals = self._process_results(movie, results)
+        except Exception as e:
+            logger.error(f"Search failed for {movie.title}: {e}")
 
-                # Deduplicate
-                for deal in new_deals:
-                    if deal.deal_hash not in seen_hashes:
-                        seen_hashes.add(deal.deal_hash)
-                        deals.append(deal)
-
-            except Exception as e:
-                logger.error(f"Search failed for {movie.title}: {e}")
-
-            # Rate limiting
-            time.sleep(self.request_delay)
+        # Rate limiting
+        time.sleep(self.request_delay)
 
         return deals
 
-    def _build_queries(self, movie: Movie) -> List[str]:
-        """Build search queries for a movie. Returns multiple queries if deep_search is enabled."""
+    def _build_query(self, movie: Movie) -> str:
+        """Build search query for a movie."""
         title = movie.title
-        title_with_year = f"{movie.title} {movie.year}" if movie.year else movie.title
+        if movie.year:
+            title = f"{movie.title} {movie.year}"
 
-        if not self.deep_search:
-            # Standard single query
-            return [f'"{title_with_year}" blu-ray OR 4K collector edition']
-
-        # Deep search: multiple targeted queries
-        queries = [
-            # Broad searches
-            f'"{title_with_year}" blu-ray collector edition',
-            f'"{title_with_year}" 4K UHD limited edition',
-            f'"{title}" steelbook',
-            # Title without year (catches more listings)
-            f'"{title}" criterion collection blu-ray',
-            f'"{title}" arrow video blu-ray',
-        ]
-
-        return queries
+        return f'"{title}" blu-ray OR 4K collector edition'
 
     def _execute_search(self, query: str) -> Dict[str, Any]:
         """Execute SerpAPI Google Shopping search."""
-        num_results = 40 if self.deep_search else 20
-
         params = {
             "api_key": self.api_key,
             "engine": "google_shopping",
             "q": query,
             "gl": "us",
             "hl": "en",
-            "num": num_results,
+            "num": 20,
         }
 
         search = GoogleSearch(params)

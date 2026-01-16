@@ -106,70 +106,15 @@
             margin-top: 0;
         }
 
-        .options-row {
+        .price-row {
             display: flex;
-            gap: 20px;
+            gap: 12px;
             align-items: flex-end;
             margin-bottom: 16px;
-            margin-top: 16px;
         }
 
-        .options-row .form-group {
+        .price-row .form-group {
             margin-bottom: 0;
-        }
-
-        .checkbox-label {
-            display: flex;
-            flex-direction: column;
-            cursor: pointer;
-            padding: 10px 0;
-        }
-
-        .checkbox-label input[type="checkbox"] {
-            position: absolute;
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .checkbox-text {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: #fff;
-            font-size: 0.9rem;
-            font-weight: 500;
-        }
-
-        .checkbox-text::before {
-            content: '';
-            width: 18px;
-            height: 18px;
-            border: 2px solid #2c3440;
-            border-radius: 4px;
-            background: #14181c;
-            transition: all 0.2s;
-        }
-
-        .checkbox-label input:checked + .checkbox-text::before {
-            background: #40c463;
-            border-color: #40c463;
-        }
-
-        .checkbox-label input:checked + .checkbox-text::after {
-            content: '✓';
-            position: absolute;
-            margin-left: 4px;
-            color: #14181c;
-            font-size: 12px;
-            font-weight: bold;
-        }
-
-        .checkbox-hint {
-            font-size: 0.75rem;
-            color: #567;
-            margin-top: 4px;
-            margin-left: 26px;
         }
 
         .price-input-wrapper {
@@ -466,7 +411,7 @@
                     >
                     <button type="submit" class="btn">Search</button>
                 </div>
-                <div class="options-row">
+                <div class="price-row">
                     <div class="form-group">
                         <label for="max_price">Max Price</label>
                         <div class="price-input-wrapper">
@@ -480,19 +425,6 @@
                                 step="5"
                             >
                         </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input
-                                type="checkbox"
-                                id="deep_search"
-                                name="deep_search"
-                                value="true"
-                                {{ 'checked' if deep_search else '' }}
-                            >
-                            <span class="checkbox-text">Deep Search</span>
-                            <span class="checkbox-hint">More thorough, slower</span>
-                        </label>
                     </div>
                 </div>
             </form>
