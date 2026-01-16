@@ -15,7 +15,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from dotenv import load_dotenv
 
 # Import deal finding components
-from src.letterboxd_scraper import Movie
+from src.letterboxd_scraper import Movie, LetterboxdScraper
 from src.edition_classifier import EditionClassifier
 from src.deal_finder import DealFinder
 
@@ -152,7 +152,7 @@ def search():
             max_price = 100.0
 
         if not movie_title:
-            error = "Please enter a movie title"
+            error = "Please enter a movie title or Letterboxd URL"
         else:
             # Check for SerpAPI key
             serpapi_key = os.getenv("SERPAPI_KEY")
@@ -161,8 +161,32 @@ def search():
                 logger.error("SERPAPI_KEY not configured")
             else:
                 try:
-                    # Create a Movie object from the title
-                    movie = Movie(title=movie_title)
+                    # Check if input is a Letterboxd film URL
+                    letterboxd_match = re.match(r'^https?://letterboxd\.com/film/([^/]+)/?$', movie_title)
+
+                    if letterboxd_match:
+                        # Fetch movie details from Letterboxd
+                        scraper = LetterboxdScraper()
+                        movie = Movie(title="", letterboxd_url=movie_title)
+                        scraper.fetch_movie_details(movie)
+
+                        # Extract title from URL slug if fetch failed
+                        if not movie.title:
+                            slug = letterboxd_match.group(1)
+                            movie.title = slug.replace("-", " ").title()
+
+                        logger.info(f"Letterboxd lookup: {movie}")
+                    else:
+                        # Parse year from title if provided (e.g., "The Thing (1982)" or "The Thing 1982")
+                        title = movie_title
+                        year = None
+                        year_match = re.search(r'\s*\(?(\d{4})\)?$', movie_title)
+                        if year_match:
+                            year = int(year_match.group(1))
+                            title = movie_title[:year_match.start()].strip()
+
+                        # Create a Movie object
+                        movie = Movie(title=title, year=year)
 
                     # Initialize classifier and deal finder
                     classifier = EditionClassifier()
@@ -175,7 +199,8 @@ def search():
 
                     # Search for deals
                     deals = finder.search_movie(movie)
-                    logger.info(f"Search for '{movie_title}' (max ${max_price}) found {len(deals)} deals")
+                    search_desc = str(movie)
+                    logger.info(f"Search for {search_desc} (max ${max_price}) found {len(deals)} deals")
 
                 except Exception as e:
                     logger.error(f"Search failed: {e}")

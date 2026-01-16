@@ -117,12 +117,22 @@ class DealFinder:
         return deals
 
     def _build_query(self, movie: Movie) -> str:
-        """Build search query for a movie."""
-        title = movie.title
-        if movie.year:
-            title = f"{movie.title} {movie.year}"
+        """Build search query for a movie.
 
-        return f'"{title}" blu-ray OR 4K collector edition'
+        Uses title and year for search. Director is used for result validation
+        rather than in the query since product titles rarely include director names.
+        """
+        # Start with title
+        parts = [f'"{movie.title}"']
+
+        # Add year if available (helps disambiguation)
+        if movie.year:
+            parts.append(str(movie.year))
+
+        # Add format keywords
+        parts.append("blu-ray OR 4K collector edition")
+
+        return " ".join(parts)
 
     def _execute_search(self, query: str) -> Dict[str, Any]:
         """Execute SerpAPI Google Shopping search."""
@@ -177,6 +187,11 @@ class DealFinder:
             logger.debug(f"Price ${price:.2f} exceeds max ${self.max_price:.2f}")
             return None
 
+        # Validate year if we have one - helps filter out wrong movies with similar titles
+        if movie.year and not self._validate_year(title, movie.year):
+            logger.debug(f"Year mismatch for '{movie.title}' ({movie.year}): {title}")
+            return None
+
         # Check if it's a special edition
         is_match, confidence, description = self.classifier.is_special_edition(title)
         if not is_match:
@@ -192,6 +207,34 @@ class DealFinder:
             matched_example=description,
             thumbnail=thumbnail,
         )
+
+    def _validate_year(self, product_title: str, expected_year: int) -> bool:
+        """
+        Validate that the product is likely for the correct movie year.
+
+        Returns True if:
+        - The product title contains the expected year
+        - The product title contains no year at all (benefit of the doubt)
+        - The expected year is within 1 year of any year found (for release date variations)
+
+        Returns False if:
+        - The product title contains a different year (likely wrong movie)
+        """
+        # Find all 4-digit years in the product title
+        years_found = re.findall(r'\b(19\d{2}|20\d{2})\b', product_title)
+
+        if not years_found:
+            # No year in title - give benefit of the doubt
+            return True
+
+        # Check if any found year is close to expected (within 1 year for release variations)
+        for year_str in years_found:
+            found_year = int(year_str)
+            if abs(found_year - expected_year) <= 1:
+                return True
+
+        # Found years but none match - likely wrong movie
+        return False
 
     def _extract_price(self, price_str: str) -> Optional[float]:
         """Extract numeric price from string."""

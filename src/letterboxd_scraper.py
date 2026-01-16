@@ -18,11 +18,15 @@ class Movie:
     title: str
     year: Optional[int] = None
     letterboxd_url: Optional[str] = None
+    director: Optional[str] = None
 
     def __str__(self) -> str:
+        parts = [self.title]
         if self.year:
-            return f"{self.title} ({self.year})"
-        return self.title
+            parts[0] = f"{self.title} ({self.year})"
+        if self.director:
+            parts.append(f"dir. {self.director}")
+        return " - ".join(parts)
 
 
 class LetterboxdScraper:
@@ -139,18 +143,106 @@ class LetterboxdScraper:
             logger.warning(f"Failed to parse movie: {e}")
             return None
 
+    def fetch_movie_details(self, movie: Movie) -> Movie:
+        """
+        Fetch additional details (title, director, year) from the movie's Letterboxd page.
+        Returns the same Movie object with updated fields.
+        """
+        if not movie.letterboxd_url:
+            return movie
 
-def get_movies_from_list(list_url: str) -> List[Movie]:
-    """Convenience function to scrape movies from a list."""
+        try:
+            response = self.session.get(movie.letterboxd_url, timeout=30)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            logger.warning(f"Failed to fetch details for {movie.letterboxd_url}: {e}")
+            return movie
+
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Extract title and year from og:title
+        # Format: <meta property="og:title" content="Movie Title (1982)">
+        og_title = soup.select_one('meta[property="og:title"]')
+        if og_title:
+            content = og_title.get("content", "")
+            year_match = re.search(r"\((\d{4})\)$", content)
+            if year_match:
+                # Extract title (everything before the year)
+                if not movie.title:
+                    movie.title = content[:year_match.start()].strip()
+                # Extract year
+                if not movie.year:
+                    movie.year = int(year_match.group(1))
+                    logger.debug(f"Found year for {movie.title}: {movie.year}")
+            elif not movie.title:
+                # No year in og:title, use whole content as title
+                movie.title = content.strip()
+
+        # Extract director from the credits section
+        # Format: <a class="contributor" href="/director/...">Director Name</a>
+        director_link = soup.select_one('a.contributor[href*="/director/"]')
+        if director_link:
+            director_name = director_link.get_text(strip=True)
+            movie.director = director_name
+            logger.debug(f"Found director for {movie.title}: {director_name}")
+
+        return movie
+
+    def enrich_movies(self, movies: List[Movie], delay: float = 0.5) -> List[Movie]:
+        """
+        Fetch detailed info for all movies in a list.
+
+        Args:
+            movies: List of movies to enrich
+            delay: Delay between requests to be respectful to Letterboxd
+
+        Returns:
+            Same list with enriched movie data
+        """
+        import time
+
+        total = len(movies)
+        logger.info(f"Enriching {total} movies with director info...")
+
+        for i, movie in enumerate(movies, 1):
+            logger.info(f"Fetching details {i}/{total}: {movie.title}")
+            self.fetch_movie_details(movie)
+
+            # Be respectful to Letterboxd
+            if i < total:
+                time.sleep(delay)
+
+        enriched_count = sum(1 for m in movies if m.director)
+        logger.info(f"Enriched {enriched_count}/{total} movies with director info")
+
+        return movies
+
+
+def get_movies_from_list(list_url: str, enrich: bool = True) -> List[Movie]:
+    """
+    Convenience function to scrape movies from a list.
+
+    Args:
+        list_url: URL of the Letterboxd list
+        enrich: If True, fetch director info for each movie (slower but more accurate searches)
+
+    Returns:
+        List of Movie objects
+    """
     scraper = LetterboxdScraper()
-    return scraper.scrape_list(list_url)
+    movies = scraper.scrape_list(list_url)
+
+    if enrich and movies:
+        movies = scraper.enrich_movies(movies)
+
+    return movies
 
 
 if __name__ == "__main__":
     # Test the scraper
     logging.basicConfig(level=logging.INFO)
     test_url = "https://letterboxd.com/brandt_clawson/list/my-hater-movie-club-list-2026/"
-    movies = get_movies_from_list(test_url)
+    movies = get_movies_from_list(test_url, enrich=True)
 
     print(f"\nFound {len(movies)} movies:\n")
     for i, movie in enumerate(movies, 1):
