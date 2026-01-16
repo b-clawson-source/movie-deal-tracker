@@ -44,11 +44,7 @@ class JobRunner:
 
     def _create_classifier(self) -> EditionClassifier:
         """Create edition classifier."""
-        api_key = os.getenv("OPENAI_API_KEY", "")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY not set in environment")
-
-        return EditionClassifier(api_key=api_key)
+        return EditionClassifier()
 
     def _create_finder(self) -> DealFinder:
         """Create deal finder."""

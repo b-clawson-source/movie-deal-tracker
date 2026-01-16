@@ -65,8 +65,7 @@ def validate_config() -> list:
     if not os.getenv("SERPAPI_KEY"):
         errors.append("SERPAPI_KEY not set")
 
-    if not os.getenv("OPENAI_API_KEY"):
-        errors.append("OPENAI_API_KEY not set")
+    # No API key needed for rule-based classifier
 
     if not os.getenv("RESEND_API_KEY"):
         errors.append("RESEND_API_KEY not set")
@@ -89,15 +88,10 @@ def list_movies(config: dict):
 
 
 def test_classifier():
-    """Test the OpenAI edition classifier."""
+    """Test the rule-based edition classifier."""
     from src.edition_classifier import EditionClassifier
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        print("Error: OPENAI_API_KEY not set")
-        sys.exit(1)
-
-    classifier = EditionClassifier(api_key=api_key)
+    classifier = EditionClassifier()
 
     test_products = [
         "The Shining (Criterion Collection) [4K UHD Blu-ray]",
@@ -105,9 +99,12 @@ def test_classifier():
         "Alien 4K Ultra HD Steelbook Limited Edition",
         "Spider-Man DVD Walmart Exclusive",
         "Arrow Video: Society Limited Edition Blu-ray",
+        "House (1977) Blu-ray Criterion Collection",
+        "Suspiria 4K UHD Synapse Films",
+        "Office Space DVD",
     ]
 
-    print("Testing OpenAI Edition Classifier\n")
+    print("Testing Rule-Based Edition Classifier\n")
     print("-" * 60)
 
     for product in test_products:

@@ -1,31 +1,88 @@
 """
-Edition classifier using OpenAI for intelligent product classification.
+Edition classifier using rule-based matching.
 Identifies special editions, formats (4K, Blu-ray, DVD), and boutique labels.
+No external API required - fast and free.
 """
 
-import os
-import json
+import re
 import logging
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 from dataclasses import dataclass
-
-from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
-# Known boutique labels for reference
+# Known boutique labels (case-insensitive matching)
 BOUTIQUE_LABELS = [
-    "Criterion Collection", "Arrow Video", "Arrow Academy",
-    "Kino Lorber", "Kino Classics", "BFI", "Masters of Cinema",
-    "Eureka", "Shout Factory", "Scream Factory", "Vinegar Syndrome",
-    "Indicator", "Second Sight", "Blue Underground", "88 Films",
-    "Severin Films", "Imprint", "Studio Canal", "Warner Archive",
-    "Twilight Time", "Olive Films", "Cohen Film Collection",
-    "Film Movement", "Flicker Alley", "Milestone Films",
-    "Oscilloscope", "Music Box Films", "Drafthouse Films",
-    "AGFA", "Synapse Films", "Code Red", "Unearthed Films",
-    "MVD Rewind", "Fun City Editions", "Arbelos", "Deaf Crocodile"
+    "Criterion Collection", "Criterion",
+    "Arrow Video", "Arrow Academy", "Arrow",
+    "Kino Lorber", "Kino Classics", "Kino",
+    "BFI", "Masters of Cinema", "Eureka",
+    "Shout Factory", "Shout! Factory", "Scream Factory",
+    "Vinegar Syndrome",
+    "Indicator", "Powerhouse Films",
+    "Second Sight", "Second Sight Films",
+    "Blue Underground",
+    "88 Films",
+    "Severin Films", "Severin",
+    "Imprint", "Imprint Films",
+    "Studio Canal", "StudioCanal",
+    "Warner Archive", "Warner Archive Collection",
+    "Twilight Time",
+    "Olive Films",
+    "Cohen Film Collection", "Cohen Media",
+    "Film Movement",
+    "Flicker Alley",
+    "Milestone Films",
+    "Oscilloscope",
+    "Music Box Films",
+    "Drafthouse Films",
+    "AGFA", "American Genre Film Archive",
+    "Synapse Films", "Synapse",
+    "Code Red",
+    "Unearthed Films",
+    "MVD Rewind", "MVD",
+    "Fun City Editions",
+    "Arbelos",
+    "Deaf Crocodile",
+    "Mondo",
+    "Grindhouse Releasing",
+    "Cult Epics",
+    "Radiance Films", "Radiance",
+    "Limited Run Games",  # For special gaming editions
 ]
+
+# Edition keywords that indicate special editions
+EDITION_KEYWORDS = [
+    "criterion", "collector", "collector's", "collectors",
+    "limited edition", "limited", "special edition",
+    "steelbook", "steel book",
+    "director's cut", "directors cut",
+    "anniversary", "restored", "remastered", "remaster",
+    "ultimate edition", "deluxe", "premium",
+    "box set", "boxset", "complete series", "complete collection",
+    "slipcover", "slip cover", "mediabook",
+    "digipack", "digipak",
+    "booklet", "with booklet",
+    "arrow exclusive", "shout exclusive",
+]
+
+# Keywords that indicate standard/non-special editions
+EXCLUDE_KEYWORDS = [
+    "standard edition", "regular edition",
+    "walmart exclusive",  # Usually just standard with different cover
+    "target exclusive",   # Usually just standard with different cover
+    "digital code", "digital copy", "digital download",
+    "rental", "previously viewed", "used",
+    "vhs", "videotape",
+    "region free only",  # Often bootleg
+]
+
+# Format patterns
+FORMAT_PATTERNS = {
+    "4K UHD": [r"4k\s*u?h?d?", r"ultra\s*hd", r"4k\s*blu-?ray", r"uhd"],
+    "Blu-ray": [r"blu-?ray", r"bluray", r"bd"],
+    "DVD": [r"\bdvd\b"],
+}
 
 
 @dataclass
@@ -35,123 +92,148 @@ class ClassificationResult:
     confidence: float
     format: str  # "4K UHD", "Blu-ray", "DVD", "Unknown"
     label: Optional[str]  # Boutique label if identified
-    edition_type: Optional[str]  # "Collector's", "Limited", "Criterion", etc.
+    edition_type: Optional[str]  # "Collector's", "Limited", etc.
     reason: str  # Explanation for the classification
 
 
 class EditionClassifier:
     """
-    Uses OpenAI to classify movie product listings.
+    Rule-based classifier for movie product listings.
     Determines if a product is a special/collector's edition worth tracking.
     """
 
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
-        self.client = OpenAI(api_key=api_key)
-        self.model = model
-        self._system_prompt = self._build_system_prompt()
+    def __init__(self):
+        # Pre-compile regex patterns for efficiency
+        self._label_patterns = self._compile_label_patterns()
+        self._edition_patterns = self._compile_patterns(EDITION_KEYWORDS)
+        self._exclude_patterns = self._compile_patterns(EXCLUDE_KEYWORDS)
+        self._format_patterns = {
+            fmt: [re.compile(p, re.IGNORECASE) for p in patterns]
+            for fmt, patterns in FORMAT_PATTERNS.items()
+        }
 
-    def _build_system_prompt(self) -> str:
-        """Build the system prompt for classification."""
-        labels_str = ", ".join(BOUTIQUE_LABELS[:20]) + ", etc."
+    def _compile_label_patterns(self) -> List[Tuple[str, re.Pattern]]:
+        """Compile boutique label patterns."""
+        patterns = []
+        for label in BOUTIQUE_LABELS:
+            # Create pattern that matches the label as a whole word
+            pattern = re.compile(r'\b' + re.escape(label) + r'\b', re.IGNORECASE)
+            patterns.append((label, pattern))
+        return patterns
 
-        return f"""You are a movie physical media expert. Your job is to analyze product listings and determine if they are special/collector's editions worth tracking for deals.
+    def _compile_patterns(self, keywords: List[str]) -> List[re.Pattern]:
+        """Compile keyword patterns."""
+        return [
+            re.compile(r'\b' + re.escape(kw) + r'\b', re.IGNORECASE)
+            for kw in keywords
+        ]
 
-SPECIAL EDITIONS include:
-- Boutique label releases (e.g., {labels_str})
-- Collector's editions, Limited editions, Steelbooks
-- Restored/Remastered releases with special features
-- Anniversary editions, Director's cuts with extras
-- Box sets and complete collections
+    def _detect_format(self, title: str) -> str:
+        """Detect the media format from the title."""
+        title_lower = title.lower()
 
-NOT SPECIAL EDITIONS:
-- Standard retail releases (regular Blu-ray/DVD without special features)
-- Digital codes or streaming
-- Used/pre-owned standard editions
-- Bootlegs or unauthorized releases
-- VHS tapes
-- Standard slipcovers without additional content
+        # Check 4K first (highest priority)
+        for pattern in self._format_patterns["4K UHD"]:
+            if pattern.search(title_lower):
+                return "4K UHD"
 
-FORMATS to identify:
-- "4K UHD" - 4K Ultra HD Blu-ray
-- "Blu-ray" - Standard Blu-ray
-- "DVD" - DVD format
-- "Combo" - Multiple formats included
-- "Unknown" - Cannot determine
+        # Check Blu-ray
+        for pattern in self._format_patterns["Blu-ray"]:
+            if pattern.search(title_lower):
+                return "Blu-ray"
 
-Respond ONLY with valid JSON in this exact format:
-{{
-  "is_special_edition": true/false,
-  "confidence": 0.0-1.0,
-  "format": "4K UHD" | "Blu-ray" | "DVD" | "Combo" | "Unknown",
-  "label": "Label name or null",
-  "edition_type": "Type description or null",
-  "reason": "Brief explanation"
-}}"""
+        # Check DVD
+        for pattern in self._format_patterns["DVD"]:
+            if pattern.search(title_lower):
+                return "DVD"
+
+        return "Unknown"
+
+    def _find_boutique_label(self, title: str) -> Optional[str]:
+        """Find a boutique label in the title."""
+        for label, pattern in self._label_patterns:
+            if pattern.search(title):
+                return label
+        return None
+
+    def _find_edition_keywords(self, title: str) -> List[str]:
+        """Find edition keywords in the title."""
+        found = []
+        for pattern in self._edition_patterns:
+            if pattern.search(title):
+                found.append(pattern.pattern.replace(r'\b', '').replace('\\', ''))
+        return found
+
+    def _is_excluded(self, title: str) -> Tuple[bool, Optional[str]]:
+        """Check if the title contains exclusion keywords."""
+        for pattern in self._exclude_patterns:
+            if pattern.search(title):
+                keyword = pattern.pattern.replace(r'\b', '').replace('\\', '')
+                return True, keyword
+        return False, None
 
     def classify(self, product_title: str) -> ClassificationResult:
         """
-        Classify a product title using OpenAI.
-
+        Classify a product title.
         Returns ClassificationResult with details about the edition.
         """
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": self._system_prompt},
-                    {"role": "user", "content": f"Classify this product: {product_title}"}
-                ],
-                temperature=0.1,  # Low temperature for consistent classification
-                max_tokens=200,
-            )
-
-            result_text = response.choices[0].message.content.strip()
-
-            # Parse JSON response
-            # Handle potential markdown code blocks
-            if result_text.startswith("```"):
-                result_text = result_text.split("```")[1]
-                if result_text.startswith("json"):
-                    result_text = result_text[4:]
-                result_text = result_text.strip()
-
-            data = json.loads(result_text)
-
-            return ClassificationResult(
-                is_special_edition=data.get("is_special_edition", False),
-                confidence=float(data.get("confidence", 0.0)),
-                format=data.get("format", "Unknown"),
-                label=data.get("label"),
-                edition_type=data.get("edition_type"),
-                reason=data.get("reason", ""),
-            )
-
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse OpenAI response: {e}")
-            logger.debug(f"Response was: {result_text}")
+        # Check for exclusions first
+        is_excluded, exclude_reason = self._is_excluded(product_title)
+        if is_excluded:
             return ClassificationResult(
                 is_special_edition=False,
-                confidence=0.0,
-                format="Unknown",
+                confidence=0.9,
+                format=self._detect_format(product_title),
                 label=None,
                 edition_type=None,
-                reason="Failed to parse classification response",
+                reason=f"Excluded: contains '{exclude_reason}'"
             )
-        except Exception as e:
-            logger.error(f"OpenAI classification failed: {e}")
-            return ClassificationResult(
-                is_special_edition=False,
-                confidence=0.0,
-                format="Unknown",
-                label=None,
-                edition_type=None,
-                reason=f"Classification error: {str(e)}",
-            )
+
+        # Detect format
+        media_format = self._detect_format(product_title)
+
+        # Find boutique label
+        label = self._find_boutique_label(product_title)
+
+        # Find edition keywords
+        edition_keywords = self._find_edition_keywords(product_title)
+
+        # Determine if it's a special edition
+        is_special = False
+        confidence = 0.0
+        edition_type = None
+        reason = ""
+
+        if label:
+            # Boutique label found - high confidence
+            is_special = True
+            confidence = 0.95
+            edition_type = f"{label} Release"
+            reason = f"Boutique label: {label}"
+        elif edition_keywords:
+            # Edition keywords found - medium-high confidence
+            is_special = True
+            confidence = 0.8
+            edition_type = edition_keywords[0].title()
+            reason = f"Edition keywords: {', '.join(edition_keywords[:3])}"
+        else:
+            # No special indicators
+            is_special = False
+            confidence = 0.7
+            reason = "No boutique label or special edition indicators found"
+
+        return ClassificationResult(
+            is_special_edition=is_special,
+            confidence=confidence,
+            format=media_format,
+            label=label,
+            edition_type=edition_type,
+            reason=reason
+        )
 
     def is_special_edition(self, product_title: str) -> Tuple[bool, float, str]:
         """
         Compatibility method matching EditionMatcher interface.
-
         Returns (is_match, confidence_score, description).
         """
         result = self.classify(product_title)
@@ -165,15 +247,9 @@ Respond ONLY with valid JSON in this exact format:
         return (result.is_special_edition, result.confidence, description)
 
 
-def create_classifier(api_key: Optional[str] = None) -> EditionClassifier:
+def create_classifier() -> EditionClassifier:
     """Factory function to create a classifier."""
-    if api_key is None:
-        api_key = os.getenv("OPENAI_API_KEY", "")
-
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY not set")
-
-    return EditionClassifier(api_key=api_key)
+    return EditionClassifier()
 
 
 if __name__ == "__main__":
@@ -188,18 +264,21 @@ if __name__ == "__main__":
         "Seven Samurai (Criterion Collection) Blu-ray",
         "Arrow Video: Society Limited Edition Blu-ray with Slipcover",
         "The Matrix - Regular DVD",
+        "House (1977) Blu-ray Criterion Collection",
+        "Suspiria 4K UHD Synapse Films",
+        "Akira Limited Edition Steelbook 4K",
+        "Office Space DVD",
+        "Vertigo Blu-ray",
     ]
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        print("Set OPENAI_API_KEY to test")
-    else:
-        classifier = EditionClassifier(api_key=api_key)
+    classifier = EditionClassifier()
 
-        print("\nClassification Results:\n")
-        for product in test_products:
-            result = classifier.classify(product)
-            status = "SPECIAL" if result.is_special_edition else "standard"
-            print(f"[{status:8}] {result.confidence:.0%} | {product}")
-            print(f"           Format: {result.format}, Label: {result.label}")
-            print(f"           Reason: {result.reason}\n")
+    print("\nRule-Based Classification Results:\n")
+    print("-" * 70)
+
+    for product in test_products:
+        result = classifier.classify(product)
+        status = "SPECIAL" if result.is_special_edition else "standard"
+        print(f"\n[{status:8}] {result.confidence:.0%} | {product}")
+        print(f"           Format: {result.format}, Label: {result.label or 'N/A'}")
+        print(f"           Reason: {result.reason}")
