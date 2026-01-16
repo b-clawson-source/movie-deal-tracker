@@ -126,6 +126,10 @@ class DealFinder:
         link = item.get("link", "")
         thumbnail = item.get("thumbnail", "")
 
+        # Skip eBay results
+        if "ebay" in source.lower():
+            return None
+
         # Extract price
         price = self._extract_price(price_str)
         if price is None:
