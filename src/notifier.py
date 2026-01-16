@@ -2,7 +2,6 @@
 Email notification system for deal alerts using Resend.
 """
 
-import os
 import logging
 from typing import List
 from datetime import datetime

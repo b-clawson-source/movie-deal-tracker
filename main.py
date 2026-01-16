@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Movie Deal Tracker - Main Entry Point
+Movie Deal Tracker - CLI Entry Point
 
-Monitors Letterboxd lists for special physical movie editions on sale.
+Command-line interface for testing and local development.
+For production, use app.py (web) and worker.py (background jobs).
 """
 
 import argparse
@@ -16,10 +17,6 @@ from dotenv import load_dotenv
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
-
-# Lazy imports for heavy dependencies
-# These are imported inside functions that need them
-# to allow --list-movies to work without all deps
 
 # Setup logging
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -58,120 +55,23 @@ def load_config() -> dict:
     # Load environment variables
     load_dotenv()
 
-    # Inject secrets from environment
-    config["search"]["serpapi_key"] = os.getenv("SERPAPI_KEY", "")
-    config["email"]["sender"] = os.getenv("EMAIL_SENDER", "")
-    config["email"]["password"] = os.getenv("EMAIL_PASSWORD", "")
-    config["email"]["recipient"] = os.getenv("EMAIL_RECIPIENT", "")
-
     return config
 
 
-def validate_config(config: dict) -> bool:
-    """Validate required configuration."""
+def validate_config() -> list:
+    """Validate required environment variables. Returns list of errors."""
     errors = []
 
-    if not config["search"]["serpapi_key"]:
-        errors.append("SERPAPI_KEY not set in environment")
+    if not os.getenv("SERPAPI_KEY"):
+        errors.append("SERPAPI_KEY not set")
 
-    if not config["email"]["sender"]:
-        errors.append("EMAIL_SENDER not set in environment")
+    if not os.getenv("OPENAI_API_KEY"):
+        errors.append("OPENAI_API_KEY not set")
 
-    if not config["email"]["password"]:
-        errors.append("EMAIL_PASSWORD not set in environment")
+    if not os.getenv("RESEND_API_KEY"):
+        errors.append("RESEND_API_KEY not set")
 
-    if not config["email"]["recipient"]:
-        errors.append("EMAIL_RECIPIENT not set in environment")
-
-    if errors:
-        print("Configuration errors:")
-        for error in errors:
-            print(f"  - {error}")
-        print("\nCopy .env.example to .env and fill in your credentials.")
-        return False
-
-    return True
-
-
-def create_components(config: dict):
-    """Create all application components."""
-    from src.edition_matcher import EditionMatcher
-    from src.deal_finder import DealFinder, DealTracker
-    from src.notifier import EmailNotifier
-
-    base_path = Path(__file__).parent
-
-    # Edition matcher
-    matcher = EditionMatcher(
-        model_name=config["matching"]["model"],
-        examples_path=base_path / "config" / "examples.yaml",
-        similarity_threshold=config["matching"]["similarity_threshold"],
-    )
-
-    # Deal finder
-    finder = DealFinder(
-        api_key=config["search"]["serpapi_key"],
-        matcher=matcher,
-        max_price=config["search"]["max_price"],
-        requests_per_minute=config["search"]["requests_per_minute"],
-    )
-
-    # Deal tracker
-    tracker = DealTracker(base_path / "data" / "found_deals.json")
-
-    # Email notifier
-    notifier = EmailNotifier(
-        smtp_server=config["email"]["smtp_server"],
-        smtp_port=config["email"]["smtp_port"],
-        sender_email=config["email"]["sender"],
-        sender_password=config["email"]["password"],
-        recipient_email=config["email"]["recipient"],
-    )
-
-    return matcher, finder, tracker, notifier
-
-
-def run_deal_check(config: dict):
-    """Run a single deal check."""
-    from src.letterboxd_scraper import get_movies_from_list
-
-    logger = logging.getLogger(__name__)
-    logger.info("Starting deal check...")
-
-    # Create components
-    matcher, finder, tracker, notifier = create_components(config)
-
-    # Get movies from Letterboxd
-    list_url = config["letterboxd"]["list_url"]
-    logger.info(f"Fetching movies from: {list_url}")
-    movies = get_movies_from_list(list_url)
-    logger.info(f"Found {len(movies)} movies in list")
-
-    if not movies:
-        logger.warning("No movies found in list!")
-        return
-
-    # Search for deals
-    logger.info("Searching for deals...")
-    all_deals = finder.find_deals(movies)
-    logger.info(f"Found {len(all_deals)} total deals")
-
-    # Filter to new deals only
-    new_deals = tracker.filter_new_deals(all_deals)
-    logger.info(f"New deals (not seen recently): {len(new_deals)}")
-
-    # Send notification if we have new deals
-    if new_deals:
-        logger.info("Sending notification...")
-        success = notifier.send_deals(new_deals)
-        if success:
-            logger.info("Notification sent successfully!")
-        else:
-            logger.error("Failed to send notification")
-    else:
-        logger.info("No new deals to notify")
-
-    logger.info("Deal check complete!")
+    return errors
 
 
 def list_movies(config: dict):
@@ -188,55 +88,86 @@ def list_movies(config: dict):
         print(f"{i:3}. {movie}")
 
 
-def test_email(config: dict):
-    """Send a test email."""
+def test_classifier():
+    """Test the OpenAI edition classifier."""
+    from src.edition_classifier import EditionClassifier
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        print("Error: OPENAI_API_KEY not set")
+        sys.exit(1)
+
+    classifier = EditionClassifier(api_key=api_key)
+
+    test_products = [
+        "The Shining (Criterion Collection) [4K UHD Blu-ray]",
+        "Jaws - Standard Blu-ray",
+        "Alien 4K Ultra HD Steelbook Limited Edition",
+        "Spider-Man DVD Walmart Exclusive",
+        "Arrow Video: Society Limited Edition Blu-ray",
+    ]
+
+    print("Testing OpenAI Edition Classifier\n")
+    print("-" * 60)
+
+    for product in test_products:
+        result = classifier.classify(product)
+        status = "SPECIAL" if result.is_special_edition else "standard"
+        print(f"\n[{status:8}] {result.confidence:.0%} confidence")
+        print(f"Product:  {product}")
+        print(f"Format:   {result.format}")
+        print(f"Label:    {result.label or 'N/A'}")
+        print(f"Reason:   {result.reason}")
+
+
+def test_email():
+    """Send a test email via Resend."""
     from src.notifier import EmailNotifier
 
-    print("Sending test email...")
+    api_key = os.getenv("RESEND_API_KEY")
+    from_email = os.getenv("EMAIL_FROM", "Movie Deal Tracker <deals@resend.dev>")
+    test_recipient = os.getenv("TEST_EMAIL_RECIPIENT")
 
-    notifier = EmailNotifier(
-        smtp_server=config["email"]["smtp_server"],
-        smtp_port=config["email"]["smtp_port"],
-        sender_email=config["email"]["sender"],
-        sender_password=config["email"]["password"],
-        recipient_email=config["email"]["recipient"],
-    )
+    if not api_key:
+        print("Error: RESEND_API_KEY not set")
+        sys.exit(1)
 
-    success = notifier.send_test()
+    if not test_recipient:
+        print("Error: TEST_EMAIL_RECIPIENT not set")
+        print("Set this to your email address to receive test emails")
+        sys.exit(1)
+
+    print(f"Sending test email to {test_recipient}...")
+
+    notifier = EmailNotifier(api_key=api_key, from_email=from_email)
+    success = notifier.send_test(recipient_email=test_recipient)
+
     if success:
         print("Test email sent successfully!")
     else:
-        print("Failed to send test email. Check your credentials.")
+        print("Failed to send test email. Check your API key.")
         sys.exit(1)
 
 
-def start_scheduler(config: dict):
-    """Start the scheduler daemon."""
-    from src.scheduler import create_scheduler
+def run_job():
+    """Run the deal check job once."""
+    from src.job_runner import run_job as execute_job
 
-    logger = logging.getLogger(__name__)
+    errors = validate_config()
+    if errors:
+        print("Configuration errors:")
+        for error in errors:
+            print(f"  - {error}")
+        print("\nCopy .env.example to .env and fill in your credentials.")
+        sys.exit(1)
 
-    def job():
-        run_deal_check(config)
-
-    scheduler = create_scheduler(
-        job_func=job,
-        run_at=config["schedule"]["run_at"],
-    )
-
-    logger.info("Starting scheduler daemon...")
-    scheduler.start(run_immediately=True)
+    execute_job()
 
 
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Movie Deal Tracker - Find special edition movies on sale"
-    )
-    parser.add_argument(
-        "--schedule",
-        action="store_true",
-        help="Run as scheduler daemon",
+        description="Movie Deal Tracker - CLI for testing and development"
     )
     parser.add_argument(
         "--list-movies",
@@ -244,9 +175,19 @@ def main():
         help="List movies from your Letterboxd list",
     )
     parser.add_argument(
+        "--test-classifier",
+        action="store_true",
+        help="Test the OpenAI edition classifier",
+    )
+    parser.add_argument(
         "--test-email",
         action="store_true",
         help="Send a test email notification",
+    )
+    parser.add_argument(
+        "--run",
+        action="store_true",
+        help="Run the deal check job once",
     )
     parser.add_argument(
         "-v", "--verbose",
@@ -259,6 +200,9 @@ def main():
     # Setup logging
     setup_logging(verbose=args.verbose)
 
+    # Load environment
+    load_dotenv()
+
     # Load config
     try:
         config = load_config()
@@ -266,23 +210,17 @@ def main():
         print(f"Failed to load config: {e}")
         sys.exit(1)
 
-    # Handle --list-movies (doesn't require full config)
+    # Handle commands
     if args.list_movies:
         list_movies(config)
-        return
-
-    # Validate config for other operations
-    if not validate_config(config):
-        sys.exit(1)
-
-    # Handle commands
-    if args.test_email:
-        test_email(config)
-    elif args.schedule:
-        start_scheduler(config)
+    elif args.test_classifier:
+        test_classifier()
+    elif args.test_email:
+        test_email()
+    elif args.run:
+        run_job()
     else:
-        # Default: run once
-        run_deal_check(config)
+        parser.print_help()
 
 
 if __name__ == "__main__":
