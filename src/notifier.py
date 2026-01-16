@@ -1,13 +1,13 @@
 """
-Email notification system for deal alerts.
+Email notification system for deal alerts using Resend.
 """
 
-import smtplib
+import os
 import logging
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from typing import List
 from datetime import datetime
+
+import resend
 
 from .deal_finder import Deal
 
@@ -15,23 +15,14 @@ logger = logging.getLogger(__name__)
 
 
 class EmailNotifier:
-    """Sends email notifications for found deals."""
+    """Sends email notifications for found deals via Resend."""
 
-    def __init__(
-        self,
-        smtp_server: str,
-        smtp_port: int,
-        sender_email: str,
-        sender_password: str,
-        recipient_email: str,
-    ):
-        self.smtp_server = smtp_server
-        self.smtp_port = smtp_port
-        self.sender_email = sender_email
-        self.sender_password = sender_password
-        self.recipient_email = recipient_email
+    def __init__(self, api_key: str, from_email: str):
+        self.api_key = api_key
+        self.from_email = from_email
+        resend.api_key = api_key
 
-    def send_deals(self, deals: List[Deal]) -> bool:
+    def send_deals(self, deals: List[Deal], recipient_email: str) -> bool:
         """Send email notification with deal summary."""
         if not deals:
             logger.info("No deals to notify")
@@ -40,7 +31,7 @@ class EmailNotifier:
         subject = f"Movie Deal Alert: {len(deals)} special edition(s) under $20!"
         body = self._format_email_body(deals)
 
-        return self._send_email(subject, body)
+        return self._send_email(subject, body, recipient_email)
 
     def send_deals_to(
         self,
@@ -56,9 +47,9 @@ class EmailNotifier:
         subject = f"Movie Deal Alert: {len(deals)} special edition(s) under $20!"
         body = self._format_email_body(deals, unsubscribe_url=unsubscribe_url)
 
-        return self._send_email(subject, body, recipient_email=recipient_email)
+        return self._send_email(subject, body, recipient_email)
 
-    def send_test(self) -> bool:
+    def send_test(self, recipient_email: str) -> bool:
         """Send a test email to verify configuration."""
         subject = "Movie Deal Tracker - Test Email"
         body = """
@@ -75,7 +66,7 @@ class EmailNotifier:
             datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
 
-        return self._send_email(subject, body)
+        return self._send_email(subject, body, recipient_email)
 
     def _format_email_body(self, deals: List[Deal], unsubscribe_url: str = "") -> str:
         """Format deals into HTML email body."""
@@ -122,58 +113,28 @@ class EmailNotifier:
 
         return body
 
-    def _send_email(self, subject: str, body: str, recipient_email: str = "") -> bool:
-        """Send an email via SMTP."""
-        # Use provided recipient or fall back to instance recipient
-        to_email = recipient_email or self.recipient_email
-
+    def _send_email(self, subject: str, body: str, recipient_email: str) -> bool:
+        """Send an email via Resend API."""
         try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = self.sender_email
-            msg["To"] = to_email
+            params = {
+                "from": self.from_email,
+                "to": [recipient_email],
+                "subject": subject,
+                "html": body,
+            }
 
-            # Attach HTML body
-            html_part = MIMEText(body, "html")
-            msg.attach(html_part)
-
-            # Connect and send
-            logger.info(f"Connecting to {self.smtp_server}:{self.smtp_port}")
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.sender_email, self.sender_password)
-                server.send_message(msg)
-
-            logger.info(f"Email sent successfully to {to_email}")
+            response = resend.Emails.send(params)
+            logger.info(f"Email sent successfully to {recipient_email}, id: {response.get('id', 'unknown')}")
             return True
 
-        except smtplib.SMTPAuthenticationError as e:
-            logger.error(f"SMTP authentication failed: {e}")
-            logger.error(
-                "If using Gmail, make sure to use an App Password, "
-                "not your regular password"
-            )
-            return False
         except Exception as e:
             logger.error(f"Failed to send email: {e}")
             return False
 
 
-def create_notifier(
-    smtp_server: str,
-    smtp_port: int,
-    sender_email: str,
-    sender_password: str,
-    recipient_email: str,
-) -> EmailNotifier:
+def create_notifier(api_key: str, from_email: str) -> EmailNotifier:
     """Factory function to create an EmailNotifier."""
-    return EmailNotifier(
-        smtp_server=smtp_server,
-        smtp_port=smtp_port,
-        sender_email=sender_email,
-        sender_password=sender_password,
-        recipient_email=recipient_email,
-    )
+    return EmailNotifier(api_key=api_key, from_email=from_email)
 
 
 if __name__ == "__main__":

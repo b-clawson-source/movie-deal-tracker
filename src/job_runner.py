@@ -66,13 +66,13 @@ class JobRunner:
 
     def _create_notifier(self) -> EmailNotifier:
         """Create email notifier."""
-        return EmailNotifier(
-            smtp_server=self.config["email"]["smtp_server"],
-            smtp_port=self.config["email"]["smtp_port"],
-            sender_email=os.getenv("EMAIL_SENDER", ""),
-            sender_password=os.getenv("EMAIL_PASSWORD", ""),
-            recipient_email="",  # Will be set per-subscriber
-        )
+        api_key = os.getenv("RESEND_API_KEY", "")
+        if not api_key:
+            raise ValueError("RESEND_API_KEY not set in environment")
+
+        from_email = os.getenv("EMAIL_FROM", "Movie Deal Tracker <deals@resend.dev>")
+
+        return EmailNotifier(api_key=api_key, from_email=from_email)
 
     def run_all_subscribers(self):
         """Process all active subscribers."""
