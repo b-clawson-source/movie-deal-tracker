@@ -315,7 +315,7 @@ def debug_search():
             "is_special_edition": is_special,
             "edition_type": edition_type,
             "year_valid": year_valid,
-            "would_include": is_special and year_valid and price is not None and price <= max_price and "ebay" not in source.lower()
+            "would_include": is_special and year_valid and price is not None and price <= max_price
         })
 
     return {

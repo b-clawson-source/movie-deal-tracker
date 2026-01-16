@@ -164,10 +164,6 @@ class DealFinder:
         # Get the best available link (product_link preferred, fall back to link)
         link = item.get("product_link") or item.get("link", "")
 
-        # Skip eBay results
-        if "ebay" in source.lower():
-            return None
-
         # Extract price
         price = self._extract_price(price_str)
         if price is None:
