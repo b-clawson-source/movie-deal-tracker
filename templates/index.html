@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Movie Deal Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         * {
             box-sizing: border-box;
@@ -12,138 +15,200 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #14181c;
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            color: #fff;
+            color: #9ab;
+        }
+
+        a {
+            color: #00e054;
+            text-decoration: none;
+        }
+
+        a:hover {
+            color: #40e878;
         }
 
         .container {
-            max-width: 500px;
-            width: 100%;
+            max-width: 440px;
+            margin: 0 auto;
+            padding: 60px 20px;
         }
 
+        /* Header */
+        .logo {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .logo h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .logo h1 span {
+            color: #00e054;
+        }
+
+        /* Card */
         .card {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 16px;
-            padding: 40px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: #1c2228;
+            border-radius: 12px;
+            padding: 32px;
         }
 
-        h1 {
-            font-size: 2rem;
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #fff;
+            text-align: center;
             margin-bottom: 8px;
-            text-align: center;
         }
 
-        .subtitle {
-            color: #a0a0a0;
+        .card-subtitle {
             text-align: center;
-            margin-bottom: 30px;
-            font-size: 0.95rem;
+            margin-bottom: 28px;
             line-height: 1.5;
+            font-size: 0.95rem;
         }
 
+        /* Form */
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 18px;
         }
 
         label {
             display: block;
-            margin-bottom: 8px;
+            font-size: 0.8rem;
             font-weight: 500;
-            font-size: 0.9rem;
+            color: #678;
+            margin-bottom: 8px;
         }
 
         input[type="email"],
-        input[type="url"] {
+        input[type="url"],
+        input[type="text"] {
             width: 100%;
             padding: 14px 16px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: #14181c;
+            border: 1px solid #2c3440;
             border-radius: 8px;
-            background: rgba(255, 255, 255, 0.05);
             color: #fff;
+            font-family: inherit;
             font-size: 1rem;
-            transition: border-color 0.2s, background 0.2s;
+            transition: border-color 0.2s;
         }
 
-        input[type="email"]:focus,
-        input[type="url"]:focus {
+        input:focus {
             outline: none;
-            border-color: #00d4aa;
-            background: rgba(255, 255, 255, 0.1);
+            border-color: #00e054;
         }
 
         input::placeholder {
-            color: #666;
+            color: #456;
         }
 
         .help-text {
-            font-size: 0.8rem;
-            color: #888;
+            font-size: 0.75rem;
+            color: #567;
             margin-top: 6px;
         }
 
-        button {
+        /* Button */
+        .btn {
             width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #00d4aa 0%, #00b894 100%);
+            padding: 14px 20px;
+            background: #00e054;
             border: none;
             border-radius: 8px;
-            color: #fff;
+            color: #14181c;
+            font-family: inherit;
             font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: background 0.2s;
+            margin-top: 8px;
         }
 
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(0, 212, 170, 0.3);
+        .btn:hover {
+            background: #40e878;
         }
 
-        button:active {
-            transform: translateY(0);
+        /* Divider */
+        .divider {
+            text-align: center;
+            margin: 28px 0;
+            color: #456;
+            font-size: 0.8rem;
+            position: relative;
         }
 
-        .features {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        .divider::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
+            height: 1px;
+            background: #2c3440;
         }
 
-        .features h3 {
-            font-size: 0.9rem;
-            color: #888;
-            margin-bottom: 15px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+        .divider span {
+            background: #1c2228;
+            padding: 0 16px;
+            position: relative;
         }
 
-        .feature-list {
-            list-style: none;
+        /* Secondary button */
+        .btn-secondary {
+            display: block;
+            width: 100%;
+            padding: 14px 20px;
+            background: transparent;
+            border: 1px solid #2c3440;
+            border-radius: 8px;
+            color: #9ab;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: border-color 0.2s, color 0.2s;
+            text-align: center;
         }
 
-        .feature-list li {
-            padding: 8px 0;
-            color: #ccc;
-            font-size: 0.9rem;
+        .btn-secondary:hover {
+            border-color: #00e054;
+            color: #00e054;
+        }
+
+        /* Labels */
+        .labels {
             display: flex;
-            align-items: center;
-            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 28px;
+            padding-top: 28px;
+            border-top: 1px solid #2c3440;
         }
 
-        .feature-list li::before {
-            content: "\2713";
-            color: #00d4aa;
-            font-weight: bold;
+        .label-tag {
+            background: #252c34;
+            color: #789;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
         }
 
+        .label-tag.highlight {
+            background: rgba(0, 224, 84, 0.12);
+            color: #00e054;
+        }
+
+        /* Flash Messages */
         .flash-messages {
             margin-bottom: 20px;
         }
@@ -156,57 +221,53 @@
         }
 
         .flash-message.error {
-            background: rgba(255, 82, 82, 0.2);
-            border: 1px solid rgba(255, 82, 82, 0.3);
-            color: #ff8a8a;
+            background: rgba(255, 80, 80, 0.1);
+            border: 1px solid rgba(255, 80, 80, 0.2);
+            color: #ff6b6b;
         }
 
+        /* Stats */
         .stats {
             text-align: center;
-            margin-top: 20px;
-            font-size: 0.85rem;
-            color: #666;
+            margin-top: 24px;
+            font-size: 0.8rem;
+            color: #567;
         }
 
-        .search-link {
+        /* Footer */
+        .footer {
             text-align: center;
-            margin-top: 25px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .search-link p {
-            color: #888;
-            font-size: 0.9rem;
-        }
-
-        .search-link a {
-            color: #00d4aa;
-            text-decoration: none;
-        }
-
-        .search-link a:hover {
-            text-decoration: underline;
+            margin-top: 40px;
+            font-size: 0.75rem;
+            color: #456;
         }
 
         @media (max-width: 480px) {
-            .card {
-                padding: 30px 20px;
+            .container {
+                padding: 40px 16px;
             }
 
-            h1 {
-                font-size: 1.5rem;
+            .card {
+                padding: 24px;
+            }
+
+            .card-title {
+                font-size: 1.3rem;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <div class="logo">
+            <h1>Deal<span>Tracker</span></h1>
+        </div>
+
         <div class="card">
-            <h1>Movie Deal Tracker</h1>
-            <p class="subtitle">
-                Get email alerts when special editions (Criterion, Arrow, etc.)
-                from your Letterboxd list go on sale for $20 or less.
+            <h2 class="card-title">Track Boutique Deals</h2>
+            <p class="card-subtitle">
+                Get notified when Criterion, Arrow, and other special editions
+                from your Letterboxd list go on sale.
             </p>
 
             {% with messages = get_flashed_messages(with_categories=true) %}
@@ -226,10 +287,10 @@
                         type="url"
                         id="list_url"
                         name="list_url"
-                        placeholder="https://letterboxd.com/username/list/my-list/"
+                        placeholder="letterboxd.com/you/list/watchlist"
                         required
                     >
-                    <p class="help-text">Public list only. Watchlists work too!</p>
+                    <p class="help-text">Any public list or watchlist</p>
                 </div>
 
                 <div class="form-group">
@@ -241,30 +302,30 @@
                         placeholder="you@example.com"
                         required
                     >
-                    <p class="help-text">We'll only email you when we find deals.</p>
                 </div>
 
-                <button type="submit">Start Tracking Deals</button>
+                <button type="submit" class="btn">Start Tracking</button>
             </form>
 
-            <div class="features">
-                <h3>What we track</h3>
-                <ul class="feature-list">
-                    <li>Criterion Collection releases</li>
-                    <li>Arrow Video & Arrow Academy</li>
-                    <li>Vinegar Syndrome & boutique labels</li>
-                    <li>4K UHD & Blu-ray special editions</li>
-                </ul>
-            </div>
+            <div class="divider"><span>or</span></div>
 
-            <div class="search-link">
-                <p>Just want to search? <a href="{{ url_for('search') }}">Search for a movie now</a></p>
+            <a href="{{ url_for('search') }}" class="btn-secondary">Search a Movie</a>
+
+            <div class="labels">
+                <span class="label-tag highlight">Criterion</span>
+                <span class="label-tag highlight">Arrow</span>
+                <span class="label-tag">Vinegar Syndrome</span>
+                <span class="label-tag">Shout</span>
+                <span class="label-tag">Kino</span>
+                <span class="label-tag">+120 more</span>
             </div>
 
             {% if subscriber_count > 0 %}
-            <p class="stats">{{ subscriber_count }} movie fans already tracking deals</p>
+            <p class="stats">{{ subscriber_count }} collectors tracking</p>
             {% endif %}
         </div>
+
+        <p class="footer">Built for physical media collectors</p>
     </div>
 </body>
 </html>

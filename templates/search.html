@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Search - Movie Deal Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         * {
             box-sizing: border-box;
@@ -12,214 +15,228 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #14181c;
             min-height: 100vh;
-            padding: 20px;
-            color: #fff;
+            color: #9ab;
+        }
+
+        a {
+            color: #00e054;
+            text-decoration: none;
+        }
+
+        a:hover {
+            color: #40e878;
         }
 
         .container {
-            max-width: 800px;
+            max-width: 600px;
             margin: 0 auto;
+            padding: 40px 20px;
         }
 
-        .nav {
-            margin-bottom: 30px;
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 32px;
         }
 
-        .nav a {
-            color: #00d4aa;
-            text-decoration: none;
+        .logo {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .logo span {
+            color: #00e054;
+        }
+
+        .back-link {
             font-size: 0.9rem;
         }
 
-        .nav a:hover {
-            text-decoration: underline;
-        }
-
+        /* Card */
         .card {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 16px;
-            padding: 40px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: #1c2228;
+            border-radius: 12px;
+            padding: 28px;
             margin-bottom: 20px;
         }
 
-        h1 {
-            font-size: 2rem;
-            margin-bottom: 8px;
-            text-align: center;
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 6px;
         }
 
-        .subtitle {
-            color: #a0a0a0;
-            text-align: center;
-            margin-bottom: 30px;
-            font-size: 0.95rem;
-            line-height: 1.5;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
+        .card-subtitle {
+            margin-bottom: 24px;
             font-size: 0.9rem;
+        }
+
+        /* Form */
+        .form-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .form-row input {
+            flex: 1;
+        }
+
+        .form-row button {
+            width: auto;
+            padding: 14px 24px;
+            margin-top: 0;
         }
 
         input[type="text"] {
             width: 100%;
             padding: 14px 16px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: #14181c;
+            border: 1px solid #2c3440;
             border-radius: 8px;
-            background: rgba(255, 255, 255, 0.05);
             color: #fff;
+            font-family: inherit;
             font-size: 1rem;
-            transition: border-color 0.2s, background 0.2s;
+            transition: border-color 0.2s;
         }
 
-        input[type="text"]:focus {
+        input:focus {
             outline: none;
-            border-color: #00d4aa;
-            background: rgba(255, 255, 255, 0.1);
+            border-color: #00e054;
         }
 
         input::placeholder {
-            color: #666;
+            color: #456;
         }
 
-        .help-text {
-            font-size: 0.8rem;
-            color: #888;
-            margin-top: 6px;
-        }
-
-        button {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #00d4aa 0%, #00b894 100%);
+        /* Button */
+        .btn {
+            padding: 14px 20px;
+            background: #00e054;
             border: none;
             border-radius: 8px;
-            color: #fff;
+            color: #14181c;
+            font-family: inherit;
             font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: background 0.2s;
         }
 
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(0, 212, 170, 0.3);
+        .btn:hover {
+            background: #40e878;
         }
 
-        button:active {
-            transform: translateY(0);
-        }
-
+        /* Error */
         .error-message {
             padding: 12px 16px;
             border-radius: 8px;
             margin-bottom: 20px;
             font-size: 0.9rem;
-            background: rgba(255, 82, 82, 0.2);
-            border: 1px solid rgba(255, 82, 82, 0.3);
-            color: #ff8a8a;
+            background: rgba(255, 80, 80, 0.1);
+            border: 1px solid rgba(255, 80, 80, 0.2);
+            color: #ff6b6b;
         }
 
+        /* Results */
         .results-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
 
         .results-header h2 {
-            font-size: 1.3rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #fff;
         }
 
         .results-count {
-            color: #00d4aa;
-            font-size: 0.9rem;
+            color: #00e054;
+            font-size: 0.85rem;
+            font-weight: 500;
         }
 
         .no-results {
             text-align: center;
-            color: #888;
-            padding: 40px 20px;
+            padding: 32px 20px;
+            color: #678;
         }
 
         .no-results h3 {
-            margin-bottom: 10px;
-            color: #aaa;
+            color: #9ab;
+            margin-bottom: 8px;
+            font-size: 1rem;
         }
 
+        /* Deal Card */
         .deal-card {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 15px;
-            transition: border-color 0.2s, background 0.2s;
+            background: #252c34;
+            border-radius: 10px;
+            padding: 18px;
+            margin-bottom: 12px;
+            transition: background 0.2s;
         }
 
         .deal-card:hover {
-            border-color: rgba(0, 212, 170, 0.3);
-            background: rgba(255, 255, 255, 0.05);
+            background: #2a323c;
         }
 
         .deal-title {
-            font-size: 1rem;
-            font-weight: 600;
-            margin-bottom: 10px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            margin-bottom: 12px;
             line-height: 1.4;
         }
 
         .deal-title a {
             color: #fff;
-            text-decoration: none;
         }
 
         .deal-title a:hover {
-            color: #00d4aa;
+            color: #00e054;
         }
 
         .deal-meta {
             display: flex;
             flex-wrap: wrap;
-            gap: 15px;
+            align-items: center;
+            gap: 12px;
             font-size: 0.85rem;
-            color: #aaa;
         }
 
         .deal-price {
-            color: #00d4aa;
+            color: #00e054;
             font-weight: 600;
-            font-size: 1.1rem;
+            font-size: 1rem;
         }
 
         .deal-retailer {
-            color: #888;
+            color: #678;
         }
 
         .deal-badge {
-            display: inline-block;
+            background: rgba(0, 224, 84, 0.12);
+            color: #00e054;
             padding: 4px 10px;
-            background: rgba(0, 212, 170, 0.15);
-            border: 1px solid rgba(0, 212, 170, 0.3);
-            border-radius: 20px;
+            border-radius: 12px;
             font-size: 0.75rem;
-            color: #00d4aa;
+            font-weight: 500;
         }
 
+        /* Loading */
         .loading {
             display: none;
             text-align: center;
             padding: 20px;
+            color: #678;
         }
 
         .loading.active {
@@ -227,13 +244,13 @@
         }
 
         .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(255, 255, 255, 0.1);
-            border-top-color: #00d4aa;
+            width: 32px;
+            height: 32px;
+            border: 3px solid #2c3440;
+            border-top-color: #00e054;
             border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px;
         }
 
         @keyframes spin {
@@ -241,16 +258,19 @@
         }
 
         @media (max-width: 480px) {
-            .card {
-                padding: 25px 20px;
+            .form-row {
+                flex-direction: column;
             }
 
-            h1 {
-                font-size: 1.5rem;
+            .form-row button {
+                width: 100%;
+            }
+
+            .card {
+                padding: 20px;
             }
 
             .deal-meta {
-                flex-direction: column;
                 gap: 8px;
             }
         }
@@ -258,49 +278,44 @@
 </head>
 <body>
     <div class="container">
-        <nav class="nav">
-            <a href="{{ url_for('index') }}">&larr; Back to Home</a>
-        </nav>
+        <header class="header">
+            <a href="{{ url_for('index') }}" class="logo">Deal<span>Tracker</span></a>
+            <a href="{{ url_for('index') }}" class="back-link">Back to Home</a>
+        </header>
 
         <div class="card">
-            <h1>Search Special Editions</h1>
-            <p class="subtitle">
-                Find boutique Blu-ray and 4K releases for any movie.
-                We search for Criterion, Arrow, Vinegar Syndrome, and 100+ other labels.
-            </p>
+            <h1 class="card-title">Search Special Editions</h1>
+            <p class="card-subtitle">Find boutique Blu-ray and 4K releases</p>
 
             {% if error %}
                 <div class="error-message">{{ error }}</div>
             {% endif %}
 
             <form method="POST" id="search-form">
-                <div class="form-group">
-                    <label for="movie_title">Movie Title</label>
+                <div class="form-row">
                     <input
                         type="text"
                         id="movie_title"
                         name="movie_title"
-                        placeholder="e.g., Mulholland Drive, Akira, The Thing..."
+                        placeholder="Enter a movie title..."
                         value="{{ movie_title }}"
                         required
                         autocomplete="off"
                     >
-                    <p class="help-text">Enter the movie title to search for special editions</p>
+                    <button type="submit" class="btn">Search</button>
                 </div>
-
-                <button type="submit">Search Editions</button>
             </form>
 
             <div class="loading" id="loading">
                 <div class="spinner"></div>
-                <p>Searching for special editions...</p>
+                <p>Searching...</p>
             </div>
         </div>
 
         {% if searched %}
         <div class="card">
             <div class="results-header">
-                <h2>Results for "{{ movie_title }}"</h2>
+                <h2>{{ movie_title }}</h2>
                 <span class="results-count">{{ deals|length }} found</span>
             </div>
 
@@ -320,8 +335,7 @@
             {% else %}
                 <div class="no-results">
                     <h3>No special editions found</h3>
-                    <p>We couldn't find any boutique releases for this title.<br>
-                    Try a different spelling or check back later.</p>
+                    <p>Try a different spelling or check back later</p>
                 </div>
             {% endif %}
         </div>
