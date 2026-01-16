@@ -34,6 +34,8 @@ class Subscriber:
     last_checked: Optional[str]
     unsubscribe_token: str
     active: bool
+    max_price: float = 20.0
+    check_frequency: str = "daily"  # daily, weekly, monthly
 
 
 class Database:
@@ -83,8 +85,25 @@ class Database:
                         created_at TEXT NOT NULL,
                         last_checked TEXT,
                         unsubscribe_token TEXT UNIQUE NOT NULL,
-                        active INTEGER DEFAULT 1
+                        active INTEGER DEFAULT 1,
+                        max_price REAL DEFAULT 20.0,
+                        check_frequency TEXT DEFAULT 'daily'
                     )
+                """)
+
+                # Migration: add columns if they don't exist
+                cursor.execute("""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                      WHERE table_name='subscribers' AND column_name='max_price') THEN
+                            ALTER TABLE subscribers ADD COLUMN max_price REAL DEFAULT 20.0;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                      WHERE table_name='subscribers' AND column_name='check_frequency') THEN
+                            ALTER TABLE subscribers ADD COLUMN check_frequency TEXT DEFAULT 'daily';
+                        END IF;
+                    END $$;
                 """)
 
                 cursor.execute("""
@@ -115,9 +134,21 @@ class Database:
                         created_at TEXT NOT NULL,
                         last_checked TEXT,
                         unsubscribe_token TEXT UNIQUE NOT NULL,
-                        active INTEGER DEFAULT 1
+                        active INTEGER DEFAULT 1,
+                        max_price REAL DEFAULT 20.0,
+                        check_frequency TEXT DEFAULT 'daily'
                     )
                 """)
+
+                # Migration: add columns if they don't exist (SQLite)
+                try:
+                    cursor.execute("ALTER TABLE subscribers ADD COLUMN max_price REAL DEFAULT 20.0")
+                except:
+                    pass  # Column already exists
+                try:
+                    cursor.execute("ALTER TABLE subscribers ADD COLUMN check_frequency TEXT DEFAULT 'daily'")
+                except:
+                    pass  # Column already exists
 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS notified_deals (
@@ -155,6 +186,8 @@ class Database:
                 last_checked=row[4],
                 unsubscribe_token=row[5],
                 active=bool(row[6]),
+                max_price=float(row[7]) if row[7] is not None else 20.0,
+                check_frequency=row[8] if row[8] else "daily",
             )
         else:
             return Subscriber(
@@ -165,9 +198,17 @@ class Database:
                 last_checked=row["last_checked"],
                 unsubscribe_token=row["unsubscribe_token"],
                 active=bool(row["active"]),
+                max_price=float(row["max_price"]) if row["max_price"] is not None else 20.0,
+                check_frequency=row["check_frequency"] if row["check_frequency"] else "daily",
             )
 
-    def add_subscriber(self, email: str, list_url: str) -> Optional[Subscriber]:
+    def add_subscriber(
+        self,
+        email: str,
+        list_url: str,
+        max_price: float = 20.0,
+        check_frequency: str = "daily"
+    ) -> Optional[Subscriber]:
         """Add a new subscriber or update existing one."""
         token = secrets.token_urlsafe(32)
         now = datetime.now().isoformat()
@@ -188,16 +229,16 @@ class Database:
                 # Update existing subscriber
                 cursor.execute(f"""
                     UPDATE subscribers
-                    SET list_url = {p}, active = 1
+                    SET list_url = {p}, active = 1, max_price = {p}, check_frequency = {p}
                     WHERE email = {p}
-                """, (list_url, email))
+                """, (list_url, max_price, check_frequency, email))
                 conn.commit()
             else:
                 # Insert new subscriber
                 cursor.execute(f"""
-                    INSERT INTO subscribers (email, list_url, created_at, unsubscribe_token, active)
-                    VALUES ({p}, {p}, {p}, {p}, 1)
-                """, (email, list_url, now, token))
+                    INSERT INTO subscribers (email, list_url, created_at, unsubscribe_token, active, max_price, check_frequency)
+                    VALUES ({p}, {p}, {p}, {p}, 1, {p}, {p})
+                """, (email, list_url, now, token, max_price, check_frequency))
                 conn.commit()
 
             return self.get_subscriber_by_email(email)

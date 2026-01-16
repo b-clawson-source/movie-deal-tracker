@@ -62,6 +62,22 @@ def subscribe():
     """Handle new subscription."""
     email = request.form.get("email", "").strip().lower()
     list_url = request.form.get("list_url", "").strip()
+    max_price = request.form.get("max_price", "20")
+    check_frequency = request.form.get("check_frequency", "daily")
+
+    # Parse and validate max_price
+    try:
+        max_price = float(max_price)
+        if max_price < 5:
+            max_price = 5
+        elif max_price > 100:
+            max_price = 100
+    except ValueError:
+        max_price = 20.0
+
+    # Validate check_frequency
+    if check_frequency not in ["daily", "weekly", "monthly"]:
+        check_frequency = "daily"
 
     # Validate inputs
     errors = []
@@ -83,10 +99,10 @@ def subscribe():
 
     # Add subscriber to database
     db = get_db()
-    subscriber = db.add_subscriber(email, list_url)
+    subscriber = db.add_subscriber(email, list_url, max_price, check_frequency)
 
     if subscriber:
-        logger.info(f"New subscriber: {email} -> {list_url}")
+        logger.info(f"New subscriber: {email} -> {list_url} (max: ${max_price}, freq: {check_frequency})")
         return render_template("success.html", email=email)
     else:
         flash("Something went wrong. Please try again.", "error")
@@ -116,12 +132,24 @@ def search():
     """On-demand movie search page."""
     deals = []
     movie_title = ""
+    max_price = 100.0
     error = None
     searched = False
 
     if request.method == "POST":
         movie_title = request.form.get("movie_title", "").strip()
+        max_price_str = request.form.get("max_price", "100")
         searched = True
+
+        # Parse max_price
+        try:
+            max_price = float(max_price_str)
+            if max_price < 5:
+                max_price = 5
+            elif max_price > 200:
+                max_price = 200
+        except ValueError:
+            max_price = 100.0
 
         if not movie_title:
             error = "Please enter a movie title"
@@ -141,13 +169,13 @@ def search():
                     finder = DealFinder(
                         api_key=serpapi_key,
                         classifier=classifier,
-                        max_price=100.0,  # Show more results for on-demand search
+                        max_price=max_price,
                         requests_per_minute=30,
                     )
 
                     # Search for deals
                     deals = finder.search_movie(movie)
-                    logger.info(f"Search for '{movie_title}' found {len(deals)} deals")
+                    logger.info(f"Search for '{movie_title}' (max ${max_price}) found {len(deals)} deals")
 
                 except Exception as e:
                     logger.error(f"Search failed: {e}")
@@ -157,6 +185,7 @@ def search():
         "search.html",
         deals=deals,
         movie_title=movie_title,
+        max_price=max_price,
         error=error,
         searched=searched,
     )

@@ -7,6 +7,7 @@ import os
 import logging
 from pathlib import Path
 from typing import Optional
+from datetime import datetime, timedelta
 
 import yaml
 from dotenv import load_dotenv
@@ -29,9 +30,11 @@ class JobRunner:
     def __init__(self):
         self.config = self._load_config()
         self.classifier = self._create_classifier()
-        self.finder = self._create_finder()
         self.notifier = self._create_notifier()
         self.db = get_db()
+        self.serpapi_key = os.getenv("SERPAPI_KEY", "")
+        if not self.serpapi_key:
+            raise ValueError("SERPAPI_KEY not set in environment")
 
     def _load_config(self) -> dict:
         """Load configuration."""
@@ -46,18 +49,35 @@ class JobRunner:
         """Create edition classifier."""
         return EditionClassifier()
 
-    def _create_finder(self) -> DealFinder:
-        """Create deal finder."""
-        api_key = os.getenv("SERPAPI_KEY", "")
-        if not api_key:
-            raise ValueError("SERPAPI_KEY not set in environment")
-
+    def _create_finder_for_subscriber(self, subscriber: Subscriber) -> DealFinder:
+        """Create deal finder with subscriber's max_price preference."""
         return DealFinder(
-            api_key=api_key,
+            api_key=self.serpapi_key,
             classifier=self.classifier,
-            max_price=self.config["search"]["max_price"],
+            max_price=subscriber.max_price,
             requests_per_minute=self.config["search"]["requests_per_minute"],
         )
+
+    def _is_due_for_check(self, subscriber: Subscriber) -> bool:
+        """Check if subscriber is due for a deal check based on their frequency."""
+        if not subscriber.last_checked:
+            return True
+
+        try:
+            last_checked = datetime.fromisoformat(subscriber.last_checked)
+        except ValueError:
+            return True
+
+        now = datetime.now()
+
+        if subscriber.check_frequency == "daily":
+            return (now - last_checked) >= timedelta(days=1)
+        elif subscriber.check_frequency == "weekly":
+            return (now - last_checked) >= timedelta(weeks=1)
+        elif subscriber.check_frequency == "monthly":
+            return (now - last_checked) >= timedelta(days=30)
+
+        return True
 
     def _create_notifier(self) -> EmailNotifier:
         """Create email notifier."""
@@ -74,17 +94,27 @@ class JobRunner:
         subscribers = self.db.get_active_subscribers()
         logger.info(f"Processing {len(subscribers)} active subscribers")
 
+        processed = 0
+        skipped = 0
+
         for subscriber in subscribers:
+            # Check if subscriber is due for a check based on their frequency
+            if not self._is_due_for_check(subscriber):
+                logger.info(f"Skipping {subscriber.email} (not due, frequency: {subscriber.check_frequency})")
+                skipped += 1
+                continue
+
             try:
                 self._process_subscriber(subscriber)
+                processed += 1
             except Exception as e:
                 logger.error(f"Failed to process subscriber {subscriber.email}: {e}")
 
-        logger.info("Finished processing all subscribers")
+        logger.info(f"Finished processing subscribers: {processed} processed, {skipped} skipped")
 
     def _process_subscriber(self, subscriber: Subscriber):
         """Process a single subscriber."""
-        logger.info(f"Processing subscriber: {subscriber.email}")
+        logger.info(f"Processing subscriber: {subscriber.email} (max: ${subscriber.max_price}, freq: {subscriber.check_frequency})")
 
         # Get movies from their list
         try:
@@ -98,8 +128,11 @@ class JobRunner:
             logger.warning(f"No movies found in list for {subscriber.email}")
             return
 
+        # Create finder with subscriber's price preference
+        finder = self._create_finder_for_subscriber(subscriber)
+
         # Search for deals
-        all_deals = self.finder.find_deals(movies)
+        all_deals = finder.find_deals(movies)
         logger.info(f"Found {len(all_deals)} total deals for {subscriber.email}")
 
         # Filter to new deals for this subscriber

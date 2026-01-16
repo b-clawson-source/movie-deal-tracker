@@ -89,7 +89,9 @@
 
         input[type="email"],
         input[type="url"],
-        input[type="text"] {
+        input[type="text"],
+        input[type="number"],
+        select {
             width: 100%;
             padding: 14px 16px;
             background: #14181c;
@@ -101,13 +103,54 @@
             transition: border-color 0.2s;
         }
 
-        input:focus {
+        input:focus,
+        select:focus {
             outline: none;
             border-color: #00e054;
         }
 
         input::placeholder {
             color: #456;
+        }
+
+        select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23678' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+        }
+
+        select option {
+            background: #1c2228;
+            color: #fff;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        .price-input {
+            position: relative;
+        }
+
+        .price-input::before {
+            content: '$';
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #678;
+            font-size: 1rem;
+        }
+
+        .price-input input {
+            padding-left: 32px;
         }
 
         .help-text {
@@ -302,6 +345,32 @@
                         placeholder="you@example.com"
                         required
                     >
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="max_price">Max Price</label>
+                        <div class="price-input">
+                            <input
+                                type="number"
+                                id="max_price"
+                                name="max_price"
+                                value="20"
+                                min="5"
+                                max="100"
+                                step="5"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="check_frequency">Check Frequency</label>
+                        <select id="check_frequency" name="check_frequency">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                    </div>
                 </div>
 
                 <button type="submit" class="btn">Start Tracking</button>
