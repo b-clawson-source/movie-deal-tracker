@@ -42,7 +42,7 @@ class EmailNotifier:
 
     def send_test(self, recipient_email: str) -> bool:
         """Send a test email to verify configuration."""
-        subject = "DealTracker - Test Email"
+        subject = "Physical Media, Reigns Supreme - Test Email"
         body = f"""
         <!DOCTYPE html>
         <html>
@@ -58,7 +58,7 @@ class EmailNotifier:
                             <!-- Logo -->
                             <tr>
                                 <td align="center" style="padding-bottom: 32px;">
-                                    <span style="font-size: 20px; font-weight: 700; color: #ffffff;">Deal</span><span style="font-size: 20px; font-weight: 700; color: #00e054;">Tracker</span>
+                                    <span style="font-size: 18px; font-weight: 700; color: #ffffff;">Physical Media,</span> <span style="font-size: 18px; font-weight: 700; color: #40c463;">Reigns Supreme</span>
                                 </td>
                             </tr>
                             <!-- Card -->
@@ -108,7 +108,7 @@ class EmailNotifier:
                         </td>
                         <!-- Details -->
                         <td valign="top" style="padding: 16px 16px 16px 0;">
-                            <p style="margin: 0 0 6px 0; font-size: 11px; font-weight: 500; color: #00e054; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <p style="margin: 0 0 6px 0; font-size: 11px; font-weight: 500; color: #40c463; text-transform: uppercase; letter-spacing: 0.5px;">
                                 {deal.matched_example}
                             </p>
                             <a href="{deal.url}" target="_blank" style="text-decoration: none;">
@@ -116,7 +116,7 @@ class EmailNotifier:
                                     {deal.product_title[:80]}{'...' if len(deal.product_title) > 80 else ''}
                                 </p>
                             </a>
-                            <p style="margin: 0 0 4px 0; font-size: 20px; font-weight: 700; color: #00e054;">
+                            <p style="margin: 0 0 4px 0; font-size: 20px; font-weight: 700; color: #40c463;">
                                 ${deal.price:.2f}
                             </p>
                             <p style="margin: 0; font-size: 13px; color: #678;">
@@ -181,7 +181,7 @@ class EmailNotifier:
                             <!-- Logo -->
                             <tr>
                                 <td align="center" style="padding-bottom: 32px;">
-                                    <span style="font-size: 20px; font-weight: 700; color: #ffffff;">Deal</span><span style="font-size: 20px; font-weight: 700; color: #00e054;">Tracker</span>
+                                    <span style="font-size: 18px; font-weight: 700; color: #ffffff;">Physical Media,</span> <span style="font-size: 18px; font-weight: 700; color: #40c463;">Reigns Supreme</span>
                                 </td>
                             </tr>
                             <!-- Header Card -->
@@ -201,7 +201,7 @@ class EmailNotifier:
                             <tr>
                                 <td align="center" style="padding-top: 32px; border-top: 1px solid #2c3440; margin-top: 20px;">
                                     <p style="margin: 0 0 4px 0; font-size: 12px; color: #567;">
-                                        Sent by DealTracker
+                                        Sent by Physical Media, Reigns Supreme
                                     </p>
                                     <p style="margin: 0; font-size: 11px; color: #456;">
                                         Monitoring your Letterboxd list for collector's editions
