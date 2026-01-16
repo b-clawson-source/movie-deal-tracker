@@ -211,13 +211,15 @@ def admin_run_check():
 
     # Check for force flag to bypass frequency check
     force = request.args.get("force", "").lower() == "true"
+    # Check for resend flag to send all deals (not just new ones)
+    resend = request.args.get("resend", "").lower() == "true"
 
     def run_check():
         try:
             from src.job_runner import JobRunner
-            logger.info(f"Background deal check started (force={force})")
+            logger.info(f"Background deal check started (force={force}, resend={resend})")
             runner = JobRunner()
-            runner.run_all_subscribers(force=force)
+            runner.run_all_subscribers(force=force, resend=resend)
             logger.info("Background deal check completed")
         except Exception as e:
             logger.error(f"Background deal check failed: {e}")
@@ -226,8 +228,8 @@ def admin_run_check():
     thread = threading.Thread(target=run_check, daemon=True)
     thread.start()
 
-    logger.info(f"Manual deal check triggered via admin endpoint (force={force})")
-    return {"status": "ok", "message": f"Deal check started in background (force={force}). Check logs for progress."}
+    logger.info(f"Manual deal check triggered via admin endpoint (force={force}, resend={resend})")
+    return {"status": "ok", "message": f"Deal check started (force={force}, resend={resend}). Check logs."}
 
 
 if __name__ == "__main__":

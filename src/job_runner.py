@@ -89,14 +89,16 @@ class JobRunner:
 
         return EmailNotifier(api_key=api_key, from_email=from_email)
 
-    def run_all_subscribers(self, force: bool = False):
+    def run_all_subscribers(self, force: bool = False, resend: bool = False):
         """Process all active subscribers.
 
         Args:
             force: If True, bypass frequency check and process all subscribers
+            resend: If True, send all deals (not just new ones)
         """
+        self._resend_mode = resend
         subscribers = self.db.get_active_subscribers()
-        logger.info(f"Processing {len(subscribers)} active subscribers (force={force})")
+        logger.info(f"Processing {len(subscribers)} active subscribers (force={force}, resend={resend})")
 
         processed = 0
         skipped = 0
@@ -139,13 +141,17 @@ class JobRunner:
         all_deals = finder.find_deals(movies)
         logger.info(f"Found {len(all_deals)} total deals for {subscriber.email}")
 
-        # Filter to new deals for this subscriber
-        new_deals = self.db.filter_new_deals(subscriber.id, all_deals)
-        logger.info(f"New deals for {subscriber.email}: {len(new_deals)}")
+        # Filter to new deals (unless resend mode is enabled)
+        if getattr(self, '_resend_mode', False):
+            deals_to_send = all_deals
+            logger.info(f"Resend mode: sending all {len(deals_to_send)} deals for {subscriber.email}")
+        else:
+            deals_to_send = self.db.filter_new_deals(subscriber.id, all_deals)
+            logger.info(f"New deals for {subscriber.email}: {len(deals_to_send)}")
 
-        # Send notification if we have new deals
-        if new_deals:
-            self._send_notification(subscriber, new_deals)
+        # Send notification if we have deals
+        if deals_to_send:
+            self._send_notification(subscriber, deals_to_send)
 
         # Update last checked timestamp
         self.db.update_last_checked(subscriber.id)
