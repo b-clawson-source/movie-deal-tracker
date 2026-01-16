@@ -244,7 +244,7 @@ def cache_status():
     }
 
 
-@app.route("/admin/debug-search")
+@app.route("/admin/debug-search", methods=["GET"])
 def debug_search():
     """Debug search to see raw results before filtering."""
     from src.edition_classifier import EditionClassifier
