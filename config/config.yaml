@@ -5,10 +5,6 @@ search:
   max_price: 20.00
   requests_per_minute: 30
 
-matching:
-  similarity_threshold: 0.55
-  model: "all-MiniLM-L6-v2"
-
 schedule:
   enabled: true
   interval_hours: 24

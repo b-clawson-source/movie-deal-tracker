@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 from .database import get_db, Subscriber
 from .letterboxd_scraper import get_movies_from_list
-from .edition_matcher import EditionMatcher
+from .edition_classifier import EditionClassifier
 from .deal_finder import DealFinder, Deal
 from .notifier import EmailNotifier
 
@@ -28,7 +28,7 @@ class JobRunner:
 
     def __init__(self):
         self.config = self._load_config()
-        self.matcher = self._create_matcher()
+        self.classifier = self._create_classifier()
         self.finder = self._create_finder()
         self.notifier = self._create_notifier()
         self.db = get_db()
@@ -42,14 +42,13 @@ class JobRunner:
 
         return config
 
-    def _create_matcher(self) -> EditionMatcher:
-        """Create edition matcher."""
-        base_path = Path(__file__).parent.parent
-        return EditionMatcher(
-            model_name=self.config["matching"]["model"],
-            examples_path=base_path / "config" / "examples.yaml",
-            similarity_threshold=self.config["matching"]["similarity_threshold"],
-        )
+    def _create_classifier(self) -> EditionClassifier:
+        """Create edition classifier."""
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY not set in environment")
+
+        return EditionClassifier(api_key=api_key)
 
     def _create_finder(self) -> DealFinder:
         """Create deal finder."""
@@ -59,7 +58,7 @@ class JobRunner:
 
         return DealFinder(
             api_key=api_key,
-            matcher=self.matcher,
+            classifier=self.classifier,
             max_price=self.config["search"]["max_price"],
             requests_per_minute=self.config["search"]["requests_per_minute"],
         )

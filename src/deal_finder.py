@@ -15,7 +15,7 @@ from pathlib import Path
 from serpapi import GoogleSearch
 
 from .letterboxd_scraper import Movie
-from .edition_matcher import EditionMatcher
+from .edition_classifier import EditionClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +53,12 @@ class DealFinder:
     def __init__(
         self,
         api_key: str,
-        matcher: EditionMatcher,
+        classifier: EditionClassifier,
         max_price: float = 20.0,
         requests_per_minute: int = 30,
     ):
         self.api_key = api_key
-        self.matcher = matcher
+        self.classifier = classifier
         self.max_price = max_price
         self.request_delay = 60.0 / requests_per_minute
 
@@ -136,7 +136,7 @@ class DealFinder:
             return None
 
         # Check if it's a special edition
-        is_match, similarity, closest = self.matcher.is_special_edition(title)
+        is_match, confidence, description = self.classifier.is_special_edition(title)
         if not is_match:
             return None
 
@@ -146,8 +146,8 @@ class DealFinder:
             price=price,
             retailer=source,
             url=link,
-            similarity_score=similarity,
-            matched_example=closest,
+            similarity_score=confidence,
+            matched_example=description,
         )
 
     def _extract_price(self, price_str: str) -> Optional[float]:
