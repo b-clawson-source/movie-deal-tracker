@@ -199,7 +199,9 @@ def health():
 
 @app.route("/admin/run-check", methods=["POST"])
 def admin_run_check():
-    """Manually trigger a deal check for all subscribers."""
+    """Manually trigger a deal check for all subscribers (runs in background)."""
+    import threading
+
     # Verify admin key
     admin_key = os.getenv("ADMIN_KEY", "")
     provided_key = request.args.get("key", "") or request.headers.get("X-Admin-Key", "")
@@ -207,17 +209,22 @@ def admin_run_check():
     if not admin_key or provided_key != admin_key:
         return {"error": "Unauthorized"}, 401
 
-    try:
-        from src.job_runner import JobRunner
+    def run_check():
+        try:
+            from src.job_runner import JobRunner
+            logger.info("Background deal check started")
+            runner = JobRunner()
+            runner.run_all_subscribers()
+            logger.info("Background deal check completed")
+        except Exception as e:
+            logger.error(f"Background deal check failed: {e}")
 
-        logger.info("Manual deal check triggered via admin endpoint")
-        runner = JobRunner()
-        runner.run_all_subscribers()
+    # Start in background thread
+    thread = threading.Thread(target=run_check, daemon=True)
+    thread.start()
 
-        return {"status": "ok", "message": "Deal check completed"}
-    except Exception as e:
-        logger.error(f"Manual deal check failed: {e}")
-        return {"error": str(e)}, 500
+    logger.info("Manual deal check triggered via admin endpoint (running in background)")
+    return {"status": "ok", "message": "Deal check started in background. Check logs for progress."}
 
 
 if __name__ == "__main__":
