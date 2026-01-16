@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search - Movie Deal Tracker</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .nav {
+            margin-bottom: 30px;
+        }
+
+        .nav a {
+            color: #00d4aa;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .nav a:hover {
+            text-decoration: underline;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 40px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #a0a0a0;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 1rem;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #00d4aa;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        input::placeholder {
+            color: #666;
+        }
+
+        .help-text {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 6px;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #00d4aa 0%, #00b894 100%);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 212, 170, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .error-message {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+            background: rgba(255, 82, 82, 0.2);
+            border: 1px solid rgba(255, 82, 82, 0.3);
+            color: #ff8a8a;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .results-header h2 {
+            font-size: 1.3rem;
+        }
+
+        .results-count {
+            color: #00d4aa;
+            font-size: 0.9rem;
+        }
+
+        .no-results {
+            text-align: center;
+            color: #888;
+            padding: 40px 20px;
+        }
+
+        .no-results h3 {
+            margin-bottom: 10px;
+            color: #aaa;
+        }
+
+        .deal-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .deal-card:hover {
+            border-color: rgba(0, 212, 170, 0.3);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .deal-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+
+        .deal-title a {
+            color: #fff;
+            text-decoration: none;
+        }
+
+        .deal-title a:hover {
+            color: #00d4aa;
+        }
+
+        .deal-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+
+        .deal-price {
+            color: #00d4aa;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .deal-retailer {
+            color: #888;
+        }
+
+        .deal-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            background: rgba(0, 212, 170, 0.15);
+            border: 1px solid rgba(0, 212, 170, 0.3);
+            border-radius: 20px;
+            font-size: 0.75rem;
+            color: #00d4aa;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #00d4aa;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 480px) {
+            .card {
+                padding: 25px 20px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .deal-meta {
+                flex-direction: column;
+                gap: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="nav">
+            <a href="{{ url_for('index') }}">&larr; Back to Home</a>
+        </nav>
+
+        <div class="card">
+            <h1>Search Special Editions</h1>
+            <p class="subtitle">
+                Find boutique Blu-ray and 4K releases for any movie.
+                We search for Criterion, Arrow, Vinegar Syndrome, and 100+ other labels.
+            </p>
+
+            {% if error %}
+                <div class="error-message">{{ error }}</div>
+            {% endif %}
+
+            <form method="POST" id="search-form">
+                <div class="form-group">
+                    <label for="movie_title">Movie Title</label>
+                    <input
+                        type="text"
+                        id="movie_title"
+                        name="movie_title"
+                        placeholder="e.g., Mulholland Drive, Akira, The Thing..."
+                        value="{{ movie_title }}"
+                        required
+                        autocomplete="off"
+                    >
+                    <p class="help-text">Enter the movie title to search for special editions</p>
+                </div>
+
+                <button type="submit">Search Editions</button>
+            </form>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Searching for special editions...</p>
+            </div>
+        </div>
+
+        {% if searched %}
+        <div class="card">
+            <div class="results-header">
+                <h2>Results for "{{ movie_title }}"</h2>
+                <span class="results-count">{{ deals|length }} found</span>
+            </div>
+
+            {% if deals %}
+                {% for deal in deals %}
+                <div class="deal-card">
+                    <div class="deal-title">
+                        <a href="{{ deal.url }}" target="_blank" rel="noopener">{{ deal.product_title }}</a>
+                    </div>
+                    <div class="deal-meta">
+                        <span class="deal-price">${{ "%.2f"|format(deal.price) }}</span>
+                        <span class="deal-retailer">{{ deal.retailer }}</span>
+                        <span class="deal-badge">{{ deal.matched_example }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="no-results">
+                    <h3>No special editions found</h3>
+                    <p>We couldn't find any boutique releases for this title.<br>
+                    Try a different spelling or check back later.</p>
+                </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        document.getElementById('search-form').addEventListener('submit', function() {
+            document.getElementById('loading').classList.add('active');
+        });
+    </script>
+</body>
+</html>

@@ -168,6 +168,27 @@
             color: #666;
         }
 
+        .search-link {
+            text-align: center;
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .search-link p {
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        .search-link a {
+            color: #00d4aa;
+            text-decoration: none;
+        }
+
+        .search-link a:hover {
+            text-decoration: underline;
+        }
+
         @media (max-width: 480px) {
             .card {
                 padding: 30px 20px;
@@ -234,6 +255,10 @@
                     <li>Vinegar Syndrome & boutique labels</li>
                     <li>4K UHD & Blu-ray special editions</li>
                 </ul>
+            </div>
+
+            <div class="search-link">
+                <p>Just want to search? <a href="{{ url_for('search') }}">Search for a movie now</a></p>
             </div>
 
             {% if subscriber_count > 0 %}

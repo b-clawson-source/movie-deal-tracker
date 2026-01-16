@@ -11,8 +11,13 @@ import re
 import logging
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from dotenv import load_dotenv
+
+# Import deal finding components
+from src.letterboxd_scraper import Movie
+from src.edition_classifier import EditionClassifier
+from src.deal_finder import DealFinder
 
 # Load environment variables
 load_dotenv()
@@ -104,6 +109,57 @@ def unsubscribe(token: str):
 
     # Invalid or expired token
     return render_template("unsubscribed.html", email=None, error=True)
+
+
+@app.route("/search", methods=["GET", "POST"])
+def search():
+    """On-demand movie search page."""
+    deals = []
+    movie_title = ""
+    error = None
+    searched = False
+
+    if request.method == "POST":
+        movie_title = request.form.get("movie_title", "").strip()
+        searched = True
+
+        if not movie_title:
+            error = "Please enter a movie title"
+        else:
+            # Check for SerpAPI key
+            serpapi_key = os.getenv("SERPAPI_KEY")
+            if not serpapi_key:
+                error = "Search is temporarily unavailable"
+                logger.error("SERPAPI_KEY not configured")
+            else:
+                try:
+                    # Create a Movie object from the title
+                    movie = Movie(title=movie_title)
+
+                    # Initialize classifier and deal finder
+                    classifier = EditionClassifier()
+                    finder = DealFinder(
+                        api_key=serpapi_key,
+                        classifier=classifier,
+                        max_price=100.0,  # Show more results for on-demand search
+                        requests_per_minute=30,
+                    )
+
+                    # Search for deals
+                    deals = finder.search_movie(movie)
+                    logger.info(f"Search for '{movie_title}' found {len(deals)} deals")
+
+                except Exception as e:
+                    logger.error(f"Search failed: {e}")
+                    error = "Search failed. Please try again."
+
+    return render_template(
+        "search.html",
+        deals=deals,
+        movie_title=movie_title,
+        error=error,
+        searched=searched,
+    )
 
 
 @app.route("/health")
