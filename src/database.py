@@ -1,15 +1,16 @@
 """
-Database layer for subscriber management.
+Database layer for subscriber management and search caching.
 Supports PostgreSQL (production) and SQLite (local development).
 """
 
 import os
+import json
 import sqlite3
 import secrets
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -145,6 +146,27 @@ class Database:
                     CREATE INDEX IF NOT EXISTS idx_notified_deals_subscriber
                     ON notified_deals(subscriber_id)
                 """)
+
+                # Search cache table for reducing API calls
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS search_cache (
+                        id SERIAL PRIMARY KEY,
+                        cache_key TEXT UNIQUE NOT NULL,
+                        results_json TEXT NOT NULL,
+                        cached_at TIMESTAMP NOT NULL,
+                        expires_at TIMESTAMP NOT NULL
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_search_cache_key
+                    ON search_cache(cache_key)
+                """)
+
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_search_cache_expires
+                    ON search_cache(expires_at)
+                """)
             else:
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS subscribers (
@@ -189,6 +211,27 @@ class Database:
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_notified_deals_subscriber
                     ON notified_deals(subscriber_id)
+                """)
+
+                # Search cache table for reducing API calls
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS search_cache (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        cache_key TEXT UNIQUE NOT NULL,
+                        results_json TEXT NOT NULL,
+                        cached_at TEXT NOT NULL,
+                        expires_at TEXT NOT NULL
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_search_cache_key
+                    ON search_cache(cache_key)
+                """)
+
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_search_cache_expires
+                    ON search_cache(expires_at)
                 """)
 
             conn.commit()
@@ -443,6 +486,187 @@ class Database:
             cursor.execute("SELECT COUNT(*) FROM subscribers WHERE active = 1")
             row = cursor.fetchone()
             return row[0] if row else 0
+        finally:
+            conn.close()
+
+    # ===== Search Cache Methods =====
+
+    def _make_cache_key(self, movie_title: str, max_price: float) -> str:
+        """Generate a cache key for a search query."""
+        # Normalize the title for consistent caching
+        normalized_title = movie_title.lower().strip()
+        return f"{normalized_title}|{max_price:.2f}"
+
+    def get_cached_results(
+        self,
+        movie_title: str,
+        max_price: float
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Get cached search results if they exist and haven't expired.
+
+        Args:
+            movie_title: Movie title that was searched
+            max_price: Max price used in search
+
+        Returns:
+            List of deal dictionaries if cache hit, None if miss/expired
+        """
+        cache_key = self._make_cache_key(movie_title, max_price)
+        now = datetime.now().isoformat()
+        p = self._placeholder()
+
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(f"""
+                SELECT results_json FROM search_cache
+                WHERE cache_key = {p} AND expires_at > {p}
+            """, (cache_key, now))
+            row = cursor.fetchone()
+
+            if row:
+                results_json = row[0] if self.use_postgres else row["results_json"]
+                logger.debug(f"Cache hit for '{movie_title}'")
+                return json.loads(results_json)
+
+            logger.debug(f"Cache miss for '{movie_title}'")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get cached results: {e}")
+            return None
+        finally:
+            conn.close()
+
+    def set_cached_results(
+        self,
+        movie_title: str,
+        max_price: float,
+        results: List[Dict[str, Any]],
+        ttl_hours: int = 48
+    ):
+        """
+        Cache search results.
+
+        Args:
+            movie_title: Movie title that was searched
+            max_price: Max price used in search
+            results: List of deal dictionaries to cache
+            ttl_hours: Time-to-live in hours (0 means don't cache)
+        """
+        if ttl_hours <= 0:
+            logger.debug(f"Skipping cache for '{movie_title}' (TTL is 0)")
+            return
+
+        cache_key = self._make_cache_key(movie_title, max_price)
+        now = datetime.now()
+        expires_at = now + timedelta(hours=ttl_hours)
+        results_json = json.dumps(results)
+        p = self._placeholder()
+
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+
+            if self.use_postgres:
+                cursor.execute(f"""
+                    INSERT INTO search_cache (cache_key, results_json, cached_at, expires_at)
+                    VALUES ({p}, {p}, {p}, {p})
+                    ON CONFLICT (cache_key) DO UPDATE SET
+                        results_json = EXCLUDED.results_json,
+                        cached_at = EXCLUDED.cached_at,
+                        expires_at = EXCLUDED.expires_at
+                """, (cache_key, results_json, now.isoformat(), expires_at.isoformat()))
+            else:
+                cursor.execute(f"""
+                    INSERT OR REPLACE INTO search_cache (cache_key, results_json, cached_at, expires_at)
+                    VALUES ({p}, {p}, {p}, {p})
+                """, (cache_key, results_json, now.isoformat(), expires_at.isoformat()))
+
+            conn.commit()
+            logger.debug(f"Cached results for '{movie_title}' (expires in {ttl_hours}h)")
+        except Exception as e:
+            logger.error(f"Failed to cache results: {e}")
+            conn.rollback()
+        finally:
+            conn.close()
+
+    def clear_expired_cache(self) -> int:
+        """
+        Remove expired cache entries.
+
+        Returns:
+            Number of entries removed
+        """
+        now = datetime.now().isoformat()
+        p = self._placeholder()
+
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(f"DELETE FROM search_cache WHERE expires_at < {p}", (now,))
+            deleted = cursor.rowcount
+            conn.commit()
+            if deleted > 0:
+                logger.info(f"Cleared {deleted} expired cache entries")
+            return deleted
+        except Exception as e:
+            logger.error(f"Failed to clear expired cache: {e}")
+            conn.rollback()
+            return 0
+        finally:
+            conn.close()
+
+    def clear_all_cache(self) -> int:
+        """
+        Clear all cache entries (useful for forcing fresh searches).
+
+        Returns:
+            Number of entries removed
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM search_cache")
+            deleted = cursor.rowcount
+            conn.commit()
+            logger.info(f"Cleared all {deleted} cache entries")
+            return deleted
+        except Exception as e:
+            logger.error(f"Failed to clear cache: {e}")
+            conn.rollback()
+            return 0
+        finally:
+            conn.close()
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics for monitoring."""
+        now = datetime.now().isoformat()
+        p = self._placeholder()
+
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+
+            # Total entries
+            cursor.execute("SELECT COUNT(*) FROM search_cache")
+            total = cursor.fetchone()[0]
+
+            # Valid (non-expired) entries
+            cursor.execute(f"SELECT COUNT(*) FROM search_cache WHERE expires_at > {p}", (now,))
+            valid = cursor.fetchone()[0]
+
+            # Expired entries
+            expired = total - valid
+
+            return {
+                "total_entries": total,
+                "valid_entries": valid,
+                "expired_entries": expired,
+            }
+        except Exception as e:
+            logger.error(f"Failed to get cache stats: {e}")
+            return {"error": str(e)}
         finally:
             conn.close()
 

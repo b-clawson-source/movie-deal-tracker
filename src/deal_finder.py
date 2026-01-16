@@ -1,5 +1,6 @@
 """
 Deal finder using SerpAPI to search for physical movie editions.
+Includes smart caching that respects sale periods.
 """
 
 import re
@@ -14,6 +15,8 @@ from serpapi import GoogleSearch
 
 from .letterboxd_scraper import Movie
 from .edition_classifier import EditionClassifier
+from .database import get_db
+from .sale_periods import get_cache_ttl_hours, is_sale_period
 
 logger = logging.getLogger(__name__)
 
@@ -61,21 +64,54 @@ class DealFinder:
         self.max_price = max_price
         self.request_delay = 60.0 / requests_per_minute
 
-    def search_movie(self, movie: Movie) -> List[Deal]:
-        """Search for deals on a specific movie."""
-        deals = []
+    def search_movie(self, movie: Movie, skip_cache: bool = False) -> List[Deal]:
+        """Search for deals on a specific movie.
 
-        # Build search query
+        Args:
+            movie: Movie to search for
+            skip_cache: If True, bypass cache and always do fresh search
+
+        Returns:
+            List of Deal objects found
+        """
+        db = get_db()
+
+        # Check sale period status
+        is_sale, sale_name = is_sale_period()
+        cache_ttl = get_cache_ttl_hours()
+
+        if is_sale:
+            logger.info(f"Sale period active ({sale_name}) - using fresh searches")
+
+        # Try cache first (unless skipping or during sale period)
+        if not skip_cache and cache_ttl > 0:
+            cached = db.get_cached_results(movie.title, self.max_price)
+            if cached is not None:
+                logger.info(f"Cache hit for '{movie.title}' - returning {len(cached)} cached deals")
+                # Convert cached dicts back to Deal objects
+                return [Deal(**deal_dict) for deal_dict in cached]
+
+        # Cache miss or skipping cache - do fresh search
+        deals = []
         query = self._build_query(movie)
         logger.info(f"Searching: {query}")
 
         try:
             results = self._execute_search(query)
             deals = self._process_results(movie, results)
+
+            # Cache the results (if caching is enabled)
+            if cache_ttl > 0:
+                deal_dicts = [deal.to_dict() for deal in deals]
+                db.set_cached_results(movie.title, self.max_price, deal_dicts, cache_ttl)
+                logger.info(f"Cached {len(deals)} deals for '{movie.title}' (TTL: {cache_ttl}h)")
+            else:
+                logger.info(f"Skipping cache during sale period")
+
         except Exception as e:
             logger.error(f"Search failed for {movie.title}: {e}")
 
-        # Rate limiting
+        # Rate limiting (only needed for actual API calls)
         time.sleep(self.request_delay)
 
         return deals
@@ -172,14 +208,30 @@ class DealFinder:
         prices = [float(m) for m in matches]
         return min(prices)
 
-    def find_deals(self, movies: List[Movie]) -> List[Deal]:
-        """Search for deals across all movies."""
+    def find_deals(self, movies: List[Movie], skip_cache: bool = False) -> List[Deal]:
+        """Search for deals across all movies.
+
+        Args:
+            movies: List of movies to search for
+            skip_cache: If True, bypass cache for all searches
+
+        Returns:
+            List of all Deal objects found
+        """
         all_deals = []
         total = len(movies)
 
+        # Log cache status at start
+        is_sale, sale_name = is_sale_period()
+        cache_ttl = get_cache_ttl_hours()
+        if is_sale:
+            logger.info(f"Sale period: {sale_name} - caching disabled")
+        else:
+            logger.info(f"Normal period - cache TTL: {cache_ttl}h")
+
         for i, movie in enumerate(movies, 1):
             logger.info(f"Processing {i}/{total}: {movie.title}")
-            deals = self.search_movie(movie)
+            deals = self.search_movie(movie, skip_cache=skip_cache)
             all_deals.extend(deals)
             logger.info(f"Found {len(deals)} deals for {movie.title}")
 

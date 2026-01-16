@@ -197,6 +197,45 @@ def health():
     return {"status": "ok"}
 
 
+@app.route("/admin/cache-status")
+def cache_status():
+    """Get cache status and sale period info."""
+    from src.sale_periods import get_cache_status
+
+    # Verify admin key
+    admin_key = os.getenv("ADMIN_KEY", "")
+    provided_key = request.args.get("key", "") or request.headers.get("X-Admin-Key", "")
+
+    if not admin_key or provided_key != admin_key:
+        return {"error": "Unauthorized"}, 401
+
+    db = get_db()
+    cache_stats = db.get_cache_stats()
+    sale_status = get_cache_status()
+
+    return {
+        "cache": cache_stats,
+        "sale_period": sale_status,
+    }
+
+
+@app.route("/admin/clear-cache", methods=["POST"])
+def clear_cache():
+    """Clear the search cache."""
+    # Verify admin key
+    admin_key = os.getenv("ADMIN_KEY", "")
+    provided_key = request.args.get("key", "") or request.headers.get("X-Admin-Key", "")
+
+    if not admin_key or provided_key != admin_key:
+        return {"error": "Unauthorized"}, 401
+
+    db = get_db()
+    deleted = db.clear_all_cache()
+
+    logger.info(f"Cache cleared via admin endpoint ({deleted} entries)")
+    return {"status": "ok", "entries_cleared": deleted}
+
+
 @app.route("/admin/run-check", methods=["POST"])
 def admin_run_check():
     """Manually trigger a deal check for all subscribers (runs in background)."""

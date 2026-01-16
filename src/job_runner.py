@@ -178,7 +178,14 @@ class JobRunner:
 
 def run_job():
     """Entry point for running the job."""
+    from .database import get_db
+
     logger.info("Starting deal check job...")
+
+    # Clean up expired cache entries
+    db = get_db()
+    db.clear_expired_cache()
+
     runner = JobRunner()
     runner.run_all_subscribers()
     logger.info("Deal check job complete!")
