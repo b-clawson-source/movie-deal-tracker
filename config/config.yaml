@@ -1,0 +1,19 @@
+letterboxd:
+  list_url: "https://letterboxd.com/brandt_clawson/list/my-hater-movie-club-list-2026/"
+
+search:
+  max_price: 20.00
+  requests_per_minute: 30
+
+matching:
+  similarity_threshold: 0.55
+  model: "all-MiniLM-L6-v2"
+
+email:
+  smtp_server: "smtp.gmail.com"
+  smtp_port: 587
+
+schedule:
+  enabled: true
+  interval_hours: 24
+  run_at: "09:00"

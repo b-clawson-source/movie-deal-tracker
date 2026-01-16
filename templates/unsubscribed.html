@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unsubscribed - Movie Deal Tracker</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 40px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+        }
+
+        .icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            font-size: 40px;
+        }
+
+        .icon.success {
+            background: rgba(0, 212, 170, 0.2);
+            border: 2px solid #00d4aa;
+        }
+
+        .icon.error {
+            background: rgba(255, 82, 82, 0.2);
+            border: 2px solid #ff5252;
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            margin-bottom: 16px;
+        }
+
+        p {
+            color: #a0a0a0;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+
+        .email {
+            color: #00d4aa;
+            font-weight: 500;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 24px;
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .back-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        @media (max-width: 480px) {
+            .card {
+                padding: 30px 20px;
+            }
+
+            h1 {
+                font-size: 1.4rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            {% if error %}
+                <div class="icon error">&#10006;</div>
+                <h1>Link not found</h1>
+                <p>
+                    This unsubscribe link is invalid or has already been used.
+                </p>
+            {% else %}
+                <div class="icon success">&#10003;</div>
+                <h1>Unsubscribed</h1>
+                <p>
+                    {% if email %}
+                        <span class="email">{{ email }}</span> has been removed from our mailing list.
+                    {% else %}
+                        You have been removed from our mailing list.
+                    {% endif %}
+                </p>
+                <p>
+                    Sorry to see you go! You can always subscribe again if you change your mind.
+                </p>
+            {% endif %}
+
+            <a href="{{ url_for('index') }}" class="back-link">Back to homepage</a>
+        </div>
+    </div>
+</body>
+</html>
