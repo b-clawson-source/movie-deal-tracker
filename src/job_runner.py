@@ -89,17 +89,21 @@ class JobRunner:
 
         return EmailNotifier(api_key=api_key, from_email=from_email)
 
-    def run_all_subscribers(self):
-        """Process all active subscribers."""
+    def run_all_subscribers(self, force: bool = False):
+        """Process all active subscribers.
+
+        Args:
+            force: If True, bypass frequency check and process all subscribers
+        """
         subscribers = self.db.get_active_subscribers()
-        logger.info(f"Processing {len(subscribers)} active subscribers")
+        logger.info(f"Processing {len(subscribers)} active subscribers (force={force})")
 
         processed = 0
         skipped = 0
 
         for subscriber in subscribers:
             # Check if subscriber is due for a check based on their frequency
-            if not self._is_due_for_check(subscriber):
+            if not force and not self._is_due_for_check(subscriber):
                 logger.info(f"Skipping {subscriber.email} (not due, frequency: {subscriber.check_frequency})")
                 skipped += 1
                 continue

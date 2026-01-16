@@ -209,12 +209,15 @@ def admin_run_check():
     if not admin_key or provided_key != admin_key:
         return {"error": "Unauthorized"}, 401
 
+    # Check for force flag to bypass frequency check
+    force = request.args.get("force", "").lower() == "true"
+
     def run_check():
         try:
             from src.job_runner import JobRunner
-            logger.info("Background deal check started")
+            logger.info(f"Background deal check started (force={force})")
             runner = JobRunner()
-            runner.run_all_subscribers()
+            runner.run_all_subscribers(force=force)
             logger.info("Background deal check completed")
         except Exception as e:
             logger.error(f"Background deal check failed: {e}")
@@ -223,8 +226,8 @@ def admin_run_check():
     thread = threading.Thread(target=run_check, daemon=True)
     thread.start()
 
-    logger.info("Manual deal check triggered via admin endpoint (running in background)")
-    return {"status": "ok", "message": "Deal check started in background. Check logs for progress."}
+    logger.info(f"Manual deal check triggered via admin endpoint (force={force})")
+    return {"status": "ok", "message": f"Deal check started in background (force={force}). Check logs for progress."}
 
 
 if __name__ == "__main__":
