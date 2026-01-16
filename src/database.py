@@ -15,9 +15,9 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-# Check if we're using PostgreSQL
-DATABASE_URL = os.getenv("DATABASE_URL")
-USE_POSTGRES = DATABASE_URL is not None
+# Check if we're using PostgreSQL (only if DATABASE_URL has a value)
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+USE_POSTGRES = bool(DATABASE_URL)
 
 if USE_POSTGRES:
     import psycopg2
