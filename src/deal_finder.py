@@ -6,11 +6,9 @@ import re
 import time
 import logging
 import hashlib
-import json
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, asdict
 from datetime import datetime
-from pathlib import Path
 
 from serpapi import GoogleSearch
 
@@ -187,69 +185,6 @@ class DealFinder:
 
         logger.info(f"Total deals found: {len(all_deals)}")
         return all_deals
-
-
-class DealTracker:
-    """Tracks found deals to avoid duplicate notifications."""
-
-    def __init__(self, data_path: Path):
-        self.data_path = data_path
-        self.data_path.parent.mkdir(parents=True, exist_ok=True)
-        self.seen_deals: Dict[str, Dict] = {}
-        self._load()
-
-    def _load(self):
-        """Load previously seen deals."""
-        if self.data_path.exists():
-            try:
-                with open(self.data_path, "r") as f:
-                    self.seen_deals = json.load(f)
-            except Exception as e:
-                logger.warning(f"Could not load deal history: {e}")
-                self.seen_deals = {}
-
-    def _save(self):
-        """Save seen deals to file."""
-        with open(self.data_path, "w") as f:
-            json.dump(self.seen_deals, f, indent=2)
-
-    def is_new_deal(self, deal: Deal, days_threshold: int = 7) -> bool:
-        """Check if deal is new (not seen in last N days)."""
-        deal_hash = deal.deal_hash
-
-        if deal_hash not in self.seen_deals:
-            return True
-
-        # Check if enough time has passed
-        last_seen = self.seen_deals[deal_hash].get("last_seen", "")
-        if last_seen:
-            try:
-                last_date = datetime.fromisoformat(last_seen)
-                days_ago = (datetime.now() - last_date).days
-                return days_ago >= days_threshold
-            except ValueError:
-                return True
-
-        return True
-
-    def mark_seen(self, deal: Deal):
-        """Mark a deal as seen."""
-        self.seen_deals[deal.deal_hash] = {
-            "deal": deal.to_dict(),
-            "last_seen": datetime.now().isoformat(),
-        }
-        self._save()
-
-    def filter_new_deals(
-        self, deals: List[Deal], days_threshold: int = 7
-    ) -> List[Deal]:
-        """Filter to only new deals and mark them as seen."""
-        new_deals = []
-        for deal in deals:
-            if self.is_new_deal(deal, days_threshold):
-                new_deals.append(deal)
-                self.mark_seen(deal)
-        return new_deals
 
 
 if __name__ == "__main__":

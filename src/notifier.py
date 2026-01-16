@@ -24,17 +24,6 @@ class EmailNotifier:
         self.from_email = from_email
         resend.api_key = api_key
 
-    def send_deals(self, deals: List[Deal], recipient_email: str) -> bool:
-        """Send email notification with deal summary."""
-        if not deals:
-            logger.info("No deals to notify")
-            return True
-
-        subject = f"🎬 {len(deals)} Boutique Deal{'s' if len(deals) > 1 else ''} Found"
-        body = self._format_email_body(deals)
-
-        return self._send_email(subject, body, recipient_email)
-
     def send_deals_to(
         self,
         recipient_email: str,

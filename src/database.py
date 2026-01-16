@@ -236,7 +236,7 @@ class Database:
         """
         token = secrets.token_urlsafe(32)
         now = datetime.now().isoformat()
-        p = "%s" if self.use_postgres else "?"
+        p = self._placeholder()
 
         conn = self._get_connection()
         try:
@@ -276,7 +276,7 @@ class Database:
 
     def get_subscription(self, email: str, list_url: str) -> Optional[Subscriber]:
         """Get a specific subscription by email and list URL."""
-        p = "%s" if self.use_postgres else "?"
+        p = self._placeholder()
 
         conn = self._get_connection()
         try:
@@ -295,7 +295,7 @@ class Database:
 
     def get_subscriber_by_email(self, email: str) -> Optional[Subscriber]:
         """Get subscriber by email."""
-        p = "%s" if self.use_postgres else "?"
+        p = self._placeholder()
 
         conn = self._get_connection()
         try:
@@ -314,7 +314,7 @@ class Database:
 
     def get_subscriber_by_token(self, token: str) -> Optional[Subscriber]:
         """Get subscriber by unsubscribe token."""
-        p = "%s" if self.use_postgres else "?"
+        p = self._placeholder()
 
         conn = self._get_connection()
         try:
@@ -345,7 +345,7 @@ class Database:
 
     def unsubscribe(self, token: str) -> bool:
         """Unsubscribe a user by their token."""
-        p = "%s" if self.use_postgres else "?"
+        p = self._placeholder()
 
         conn = self._get_connection()
         try:
@@ -367,7 +367,7 @@ class Database:
     def update_last_checked(self, subscriber_id: int):
         """Update the last_checked timestamp for a subscriber."""
         now = datetime.now().isoformat()
-        p = "%s" if self.use_postgres else "?"
+        p = self._placeholder()
 
         conn = self._get_connection()
         try:
@@ -386,7 +386,7 @@ class Database:
 
     def is_deal_notified(self, subscriber_id: int, deal_hash: str) -> bool:
         """Check if a deal has already been notified to this subscriber."""
-        p = "%s" if self.use_postgres else "?"
+        p = self._placeholder()
 
         conn = self._get_connection()
         try:
@@ -403,7 +403,7 @@ class Database:
     def mark_deal_notified(self, subscriber_id: int, deal_hash: str):
         """Mark a deal as notified for a subscriber."""
         now = datetime.now().isoformat()
-        p = "%s" if self.use_postgres else "?"
+        p = self._placeholder()
 
         conn = self._get_connection()
         try:

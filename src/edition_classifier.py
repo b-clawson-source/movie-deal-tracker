@@ -342,11 +342,6 @@ class EditionClassifier:
         return (result.is_special_edition, result.confidence, description)
 
 
-def create_classifier() -> EditionClassifier:
-    """Factory function to create a classifier."""
-    return EditionClassifier()
-
-
 if __name__ == "__main__":
     # Test the classifier
     logging.basicConfig(level=logging.INFO)
