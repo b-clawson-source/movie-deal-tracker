@@ -106,6 +106,26 @@ class Database:
                     END $$;
                 """)
 
+                # Migration: allow multiple lists per user
+                # Drop unique constraint on email, add unique on (email, list_url)
+                cursor.execute("""
+                    DO $$
+                    BEGIN
+                        -- Drop the unique constraint on email if it exists
+                        IF EXISTS (SELECT 1 FROM information_schema.table_constraints
+                                  WHERE table_name='subscribers' AND constraint_type='UNIQUE'
+                                  AND constraint_name='subscribers_email_key') THEN
+                            ALTER TABLE subscribers DROP CONSTRAINT subscribers_email_key;
+                        END IF;
+                        -- Add unique constraint on email+list_url if it doesn't exist
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints
+                                      WHERE table_name='subscribers'
+                                      AND constraint_name='subscribers_email_list_url_key') THEN
+                            ALTER TABLE subscribers ADD CONSTRAINT subscribers_email_list_url_key UNIQUE (email, list_url);
+                        END IF;
+                    END $$;
+                """)
+
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS notified_deals (
                         id SERIAL PRIMARY KEY,
@@ -209,7 +229,11 @@ class Database:
         max_price: float = 20.0,
         check_frequency: str = "daily"
     ) -> Optional[Subscriber]:
-        """Add a new subscriber or update existing one."""
+        """Add a new subscription or update existing one.
+
+        A user can have multiple subscriptions (one per list URL).
+        If the same email+list_url combo exists, update preferences.
+        """
         token = secrets.token_urlsafe(32)
         now = datetime.now().isoformat()
         p = "%s" if self.use_postgres else "?"
@@ -218,34 +242,53 @@ class Database:
         try:
             cursor = conn.cursor()
 
-            # Check if subscriber exists
+            # Check if this email+list_url combo already exists
             cursor.execute(
-                f"SELECT * FROM subscribers WHERE email = {p}",
-                (email,)
+                f"SELECT * FROM subscribers WHERE email = {p} AND list_url = {p}",
+                (email, list_url)
             )
             existing = cursor.fetchone()
 
             if existing:
-                # Update existing subscriber
+                # Update existing subscription's preferences
                 cursor.execute(f"""
                     UPDATE subscribers
-                    SET list_url = {p}, active = 1, max_price = {p}, check_frequency = {p}
-                    WHERE email = {p}
-                """, (list_url, max_price, check_frequency, email))
+                    SET active = 1, max_price = {p}, check_frequency = {p}
+                    WHERE email = {p} AND list_url = {p}
+                """, (max_price, check_frequency, email, list_url))
                 conn.commit()
             else:
-                # Insert new subscriber
+                # Create new subscription (same user can have multiple lists)
                 cursor.execute(f"""
                     INSERT INTO subscribers (email, list_url, created_at, unsubscribe_token, active, max_price, check_frequency)
                     VALUES ({p}, {p}, {p}, {p}, 1, {p}, {p})
                 """, (email, list_url, now, token, max_price, check_frequency))
                 conn.commit()
 
-            return self.get_subscriber_by_email(email)
+            return self.get_subscription(email, list_url)
 
         except Exception as e:
             logger.error(f"Failed to add subscriber: {e}")
             conn.rollback()
+            return None
+        finally:
+            conn.close()
+
+    def get_subscription(self, email: str, list_url: str) -> Optional[Subscriber]:
+        """Get a specific subscription by email and list URL."""
+        p = "%s" if self.use_postgres else "?"
+
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT * FROM subscribers WHERE email = {p} AND list_url = {p}",
+                (email, list_url)
+            )
+            row = cursor.fetchone()
+
+            if row:
+                return self._row_to_subscriber(row)
             return None
         finally:
             conn.close()
