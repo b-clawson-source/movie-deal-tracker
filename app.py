@@ -133,12 +133,14 @@ def search():
     deals = []
     movie_title = ""
     max_price = 100.0
+    deep_search = False
     error = None
     searched = False
 
     if request.method == "POST":
         movie_title = request.form.get("movie_title", "").strip()
         max_price_str = request.form.get("max_price", "100")
+        deep_search = request.form.get("deep_search") == "true"
         searched = True
 
         # Parse max_price
@@ -171,11 +173,12 @@ def search():
                         classifier=classifier,
                         max_price=max_price,
                         requests_per_minute=30,
+                        deep_search=deep_search,
                     )
 
                     # Search for deals
                     deals = finder.search_movie(movie)
-                    logger.info(f"Search for '{movie_title}' (max ${max_price}) found {len(deals)} deals")
+                    logger.info(f"Search for '{movie_title}' (max ${max_price}, deep={deep_search}) found {len(deals)} deals")
 
                 except Exception as e:
                     logger.error(f"Search failed: {e}")
@@ -186,6 +189,7 @@ def search():
         deals=deals,
         movie_title=movie_title,
         max_price=max_price,
+        deep_search=deep_search,
         error=error,
         searched=searched,
     )
@@ -213,13 +217,15 @@ def admin_run_check():
     force = request.args.get("force", "").lower() == "true"
     # Check for resend flag to send all deals (not just new ones)
     resend = request.args.get("resend", "").lower() == "true"
+    # Check for deep flag to enable deep search mode
+    deep = request.args.get("deep", "").lower() == "true"
 
     def run_check():
         try:
             from src.job_runner import JobRunner
-            logger.info(f"Background deal check started (force={force}, resend={resend})")
+            logger.info(f"Background deal check started (force={force}, resend={resend}, deep={deep})")
             runner = JobRunner()
-            runner.run_all_subscribers(force=force, resend=resend)
+            runner.run_all_subscribers(force=force, resend=resend, deep=deep)
             logger.info("Background deal check completed")
         except Exception as e:
             logger.error(f"Background deal check failed: {e}")
@@ -228,8 +234,8 @@ def admin_run_check():
     thread = threading.Thread(target=run_check, daemon=True)
     thread.start()
 
-    logger.info(f"Manual deal check triggered via admin endpoint (force={force}, resend={resend})")
-    return {"status": "ok", "message": f"Deal check started (force={force}, resend={resend}). Check logs."}
+    logger.info(f"Manual deal check triggered via admin endpoint (force={force}, resend={resend}, deep={deep})")
+    return {"status": "ok", "message": f"Deal check started (force={force}, resend={resend}, deep={deep}). Check logs."}
 
 
 if __name__ == "__main__":
