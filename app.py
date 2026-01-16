@@ -197,6 +197,29 @@ def health():
     return {"status": "ok"}
 
 
+@app.route("/admin/run-check", methods=["POST"])
+def admin_run_check():
+    """Manually trigger a deal check for all subscribers."""
+    # Verify admin key
+    admin_key = os.getenv("ADMIN_KEY", "")
+    provided_key = request.args.get("key", "") or request.headers.get("X-Admin-Key", "")
+
+    if not admin_key or provided_key != admin_key:
+        return {"error": "Unauthorized"}, 401
+
+    try:
+        from src.job_runner import JobRunner
+
+        logger.info("Manual deal check triggered via admin endpoint")
+        runner = JobRunner()
+        runner.run_all_subscribers()
+
+        return {"status": "ok", "message": "Deal check completed"}
+    except Exception as e:
+        logger.error(f"Manual deal check failed: {e}")
+        return {"error": str(e)}, 500
+
+
 if __name__ == "__main__":
     # Development server
     port = int(os.getenv("PORT", 5000))
