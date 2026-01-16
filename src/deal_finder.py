@@ -125,31 +125,8 @@ class DealFinder:
         source = item.get("source", "Unknown")
         thumbnail = item.get("thumbnail", "")
 
-        # Try to get the most direct retailer link:
-        # 1. Check sellers array for direct retailer links
-        # 2. Fall back to product_link
-        # 3. Last resort: link (often Google redirect)
-        link = ""
-        sellers = item.get("sellers", [])
-        if sellers and len(sellers) > 0:
-            # Get the first seller's direct link
-            seller_link = sellers[0].get("link", "")
-            if seller_link and "google.com" not in seller_link:
-                link = seller_link
-        if not link:
-            product_link = item.get("product_link", "")
-            if product_link and "google.com" not in product_link:
-                link = product_link
-        if not link:
-            # Last resort - use link but skip if it's a Google redirect
-            fallback = item.get("link", "")
-            if fallback and "google.com" not in fallback:
-                link = fallback
-
-        # Skip if we couldn't find a direct retailer link
-        if not link:
-            logger.debug(f"No direct retailer link found for: {title}")
-            return None
+        # Get the best available link (product_link preferred, fall back to link)
+        link = item.get("product_link") or item.get("link", "")
 
         # Skip eBay results
         if "ebay" in source.lower():
