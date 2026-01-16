@@ -119,7 +119,7 @@
 
         .price-input-wrapper {
             position: relative;
-            width: 100px;
+            width: 120px;
         }
 
         .price-input-wrapper::before {
@@ -130,10 +130,11 @@
             transform: translateY(-50%);
             color: #678;
             font-size: 1rem;
+            z-index: 1;
         }
 
-        .price-input-wrapper input {
-            padding-left: 38px;
+        .price-input-wrapper input[type="number"] {
+            padding: 14px 16px 14px 36px;
             width: 100%;
         }
 
