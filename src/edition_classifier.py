@@ -13,42 +13,125 @@ logger = logging.getLogger(__name__)
 
 # Known boutique labels (case-insensitive matching)
 BOUTIQUE_LABELS = [
+    # Major boutique labels
     "Criterion Collection", "Criterion",
-    "Arrow Video", "Arrow Academy", "Arrow",
-    "Kino Lorber", "Kino Classics", "Kino",
-    "BFI", "Masters of Cinema", "Eureka",
-    "Shout Factory", "Shout! Factory", "Scream Factory",
-    "Vinegar Syndrome",
-    "Indicator", "Powerhouse Films",
+    "Arrow Video", "Arrow Academy", "Arrow Films",
+    "Kino Lorber", "Kino Classics", "Kino Cult",
+    "Shout Factory", "Shout! Factory", "Scream Factory", "Shout Select",
+    "Vinegar Syndrome", "VS",
+
+    # UK boutique labels
+    "BFI", "British Film Institute",
+    "Masters of Cinema", "Eureka Entertainment", "Eureka",
+    "Indicator", "Indicator Series", "Powerhouse Films", "Powerhouse Indicator",
     "Second Sight", "Second Sight Films",
+    "88 Films", "88 Asia",
+    "Radiance Films", "Radiance",
+    "101 Films",
+    "Studiocanal", "Studio Canal",
+    "Network Distributing", "Network",
+    "Fabulous Films",
+    "Signal One", "Signal One Entertainment",
+
+    # US boutique labels
     "Blue Underground",
-    "88 Films",
     "Severin Films", "Severin",
-    "Imprint", "Imprint Films",
-    "Studio Canal", "StudioCanal",
-    "Warner Archive", "Warner Archive Collection",
-    "Twilight Time",
+    "Synapse Films", "Synapse",
+    "Grindhouse Releasing",
+    "Code Red", "Code Red DVD",
+    "Unearthed Films", "Unearthed Classics",
+    "AGFA", "American Genre Film Archive",
+    "Cult Epics",
+    "CAV", "CAV Distributing",
+    "Dark Force Entertainment",
+    "Full Moon Features", "Full Moon",
+    "Massacre Video",
+    "Saturn's Core",
+    "Terror Vision",
+    "Visual Vengeance",
+    "Intervision", "Intervision Picture Corp",
+    "Mondo Macabro",
+    "Mondo",
+    "Raro Video",
+    "Camera Obscura",
+    "Altered Innocence",
+    "Cinelicious Pics",
+    "Dekanalog",
+    "DiabolikDVD", "Diabolik",
+    "Distribution Solutions",
+    "Distribpix",
+    "Garagehouse Pictures",
+    "Gold Ninja Video",
+    "Hemlock Films",
+    "JVTVX",
+    "Kitten Media",
+    "MVD", "MVD Rewind", "MVD Visual", "MVD Entertainment",
     "Olive Films",
-    "Cohen Film Collection", "Cohen Media",
-    "Film Movement",
+    "Oscilloscope", "Oscilloscope Laboratories",
+    "Scorpion Releasing",
+    "Shudder", "Shudder Exclusive",
+    "Utopia Distribution",
+    "Vinegar Syndrome Labs",
+    "Wild Eye Releasing",
+
+    # Premium/Collector labels
+    "Twilight Time",
+    "Fun City Editions",
+    "Arbelos", "Arbelos Films",
+    "Deaf Crocodile",
+    "Le Chat Qui Fume",
+    "Imprint", "Imprint Films", "Via Vision",
+    "Explosive Media",
+    "Wicked Vision",
+    "Nameless Media",
+    "NSM Records",
+    "OFDb Filmworks",
+    "Subkultur", "Subkultur Entertainment",
+    "Anolis Entertainment",
+    "Camera Obscura Mediabook",
+    "Capelight Pictures",
+    "Filmconfect",
+    "Koch Media", "Koch Films",
+    "Plaion Pictures",
+    "Turbine Media", "Turbine Medien",
+
+    # Classic/Archive labels
+    "Warner Archive", "Warner Archive Collection", "WAC",
+    "Cohen Film Collection", "Cohen Media Group",
+    "Film Movement", "Film Movement Classics",
     "Flicker Alley",
-    "Milestone Films",
-    "Oscilloscope",
+    "Milestone Films", "Milestone",
     "Music Box Films",
     "Drafthouse Films",
-    "AGFA", "American Genre Film Archive",
-    "Synapse Films", "Synapse",
-    "Code Red",
-    "Unearthed Films",
-    "MVD Rewind", "MVD",
-    "Fun City Editions",
-    "Arbelos",
-    "Deaf Crocodile",
-    "Mondo",
-    "Grindhouse Releasing",
-    "Cult Epics",
-    "Radiance Films", "Radiance",
-    "Limited Run Games",  # For special gaming editions
+    "MUBI",
+    "Janus Films",
+    "Grasshopper Film",
+    "Icarus Films",
+    "Kino Marquee",
+    "Magnolia Pictures",
+    "Metrograph Pictures",
+    "NEON",
+    "Photon Films",
+    "Strand Releasing",
+
+    # International boutique
+    "Carlotta Films",
+    "Gaumont",
+    "Pathe",
+    "Wild Side Video",
+    "Elephant Films",
+    "ESC Editions",
+    "Rimini Editions",
+    "Sidonis Calysta",
+    "Spectrum Films",
+    "CG Entertainment",
+    "Midnight Factory",
+    "Plaion", "Plaion Pictures",
+    "Entertainment One", "eOne",
+    "Umbrella Entertainment",
+    "Madman Entertainment", "Madman",
+    "Beyond Home Entertainment",
+    "Shock Entertainment",
 ]
 
 # Edition keywords that indicate special editions
@@ -66,15 +149,27 @@ EDITION_KEYWORDS = [
     "arrow exclusive", "shout exclusive",
 ]
 
-# Keywords that indicate standard/non-special editions
+# Keywords that indicate standard/non-special editions or unwanted formats
 EXCLUDE_KEYWORDS = [
+    # DVD format - we only want Blu-ray and 4K
+    "dvd",
+    # Standard editions
     "standard edition", "regular edition",
-    "walmart exclusive",  # Usually just standard with different cover
-    "target exclusive",   # Usually just standard with different cover
+    # Retail exclusives (usually just different cover)
+    "walmart exclusive",
+    "target exclusive",
+    "best buy exclusive",
+    # Digital/streaming
     "digital code", "digital copy", "digital download",
-    "rental", "previously viewed", "used",
-    "vhs", "videotape",
-    "region free only",  # Often bootleg
+    "streaming", "digital only",
+    # Used/rental
+    "rental", "previously viewed", "used", "pre-owned",
+    "ex-rental", "ex rental",
+    # Obsolete formats
+    "vhs", "videotape", "laserdisc", "hd dvd", "hd-dvd",
+    # Bootlegs/unauthorized
+    "region free only", "all region", "bootleg",
+    "unauthorized", "import copy",
 ]
 
 # Format patterns
