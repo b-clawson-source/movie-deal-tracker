@@ -244,6 +244,89 @@ def cache_status():
     }
 
 
+@app.route("/admin/debug-search")
+def debug_search():
+    """Debug search to see raw results before filtering."""
+    from src.edition_classifier import EditionClassifier
+    from src.deal_finder import DealFinder
+
+    # Verify admin key
+    admin_key = os.getenv("ADMIN_KEY", "")
+    provided_key = request.args.get("key", "") or request.headers.get("X-Admin-Key", "")
+
+    if not admin_key or provided_key != admin_key:
+        return {"error": "Unauthorized"}, 401
+
+    movie_title = request.args.get("title", "House")
+    movie_year = request.args.get("year", "1977")
+    max_price = float(request.args.get("max_price", "100"))
+
+    try:
+        year = int(movie_year) if movie_year else None
+    except:
+        year = None
+
+    serpapi_key = os.getenv("SERPAPI_KEY")
+    if not serpapi_key:
+        return {"error": "SERPAPI_KEY not configured"}, 500
+
+    # Create movie and build query
+    movie = Movie(title=movie_title, year=year)
+    classifier = EditionClassifier()
+    finder = DealFinder(
+        api_key=serpapi_key,
+        classifier=classifier,
+        max_price=max_price,
+        requests_per_minute=30,
+    )
+
+    query = finder._build_query(movie)
+
+    # Execute raw search
+    try:
+        raw_results = finder._execute_search(query)
+        shopping_results = raw_results.get("shopping_results", [])
+    except Exception as e:
+        return {"error": str(e), "query": query}, 500
+
+    # Analyze each result
+    analysis = []
+    for item in shopping_results[:10]:  # First 10 results
+        title = item.get("title", "")
+        price_str = item.get("price", "")
+        source = item.get("source", "")
+
+        # Extract price
+        price = finder._extract_price(price_str)
+
+        # Check edition
+        is_special, confidence, edition_type = classifier.is_special_edition(title)
+
+        # Check year
+        year_valid = True
+        if year:
+            year_valid = finder._validate_year(title, year)
+
+        analysis.append({
+            "title": title,
+            "price": price,
+            "price_str": price_str,
+            "source": source,
+            "is_special_edition": is_special,
+            "edition_type": edition_type,
+            "year_valid": year_valid,
+            "would_include": is_special and year_valid and price is not None and price <= max_price and "ebay" not in source.lower()
+        })
+
+    return {
+        "query": query,
+        "movie": {"title": movie_title, "year": year},
+        "max_price": max_price,
+        "total_raw_results": len(shopping_results),
+        "analysis": analysis
+    }
+
+
 @app.route("/admin/clear-cache", methods=["POST"])
 def clear_cache():
     """Clear the search cache."""
