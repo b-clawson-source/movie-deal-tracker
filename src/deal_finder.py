@@ -119,20 +119,12 @@ class DealFinder:
     def _build_query(self, movie: Movie) -> str:
         """Build search query for a movie.
 
-        Uses title and year for search. Director is used for result validation
-        rather than in the query since product titles rarely include director names.
+        Uses title for search. Year and director are used for result validation
+        rather than in the query since they often don't appear in product titles.
         """
-        # Start with title
-        parts = [f'"{movie.title}"']
-
-        # Add year if available (helps disambiguation)
-        if movie.year:
-            parts.append(str(movie.year))
-
-        # Add format keywords
-        parts.append("blu-ray OR 4K collector edition")
-
-        return " ".join(parts)
+        # Use just the title - year filtering happens in _process_item
+        # Including year in query is too restrictive (many products omit it)
+        return f'"{movie.title}" blu-ray OR 4K criterion OR arrow OR shout'
 
     def _execute_search(self, query: str) -> Dict[str, Any]:
         """Execute SerpAPI Google Shopping search."""
