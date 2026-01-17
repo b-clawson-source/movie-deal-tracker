@@ -17,6 +17,7 @@ from .letterboxd_scraper import Movie
 from .edition_classifier import EditionClassifier
 from .database import get_db
 from .sale_periods import get_cache_ttl_hours, is_sale_period
+from .retailer_scrapers import search_boutique_retailers, RetailerResult
 
 logger = logging.getLogger(__name__)
 
@@ -93,27 +94,73 @@ class DealFinder:
 
         # Cache miss or skipping cache - do fresh search
         deals = []
+
+        # 1. Search Google Shopping via SerpAPI
         query = self._build_query(movie)
-        logger.info(f"Searching: {query}")
+        logger.info(f"Searching Google Shopping: {query}")
 
         try:
             results = self._execute_search(query)
-            deals = self._process_results(movie, results)
-
-            # Cache the results (if caching is enabled)
-            if cache_ttl > 0:
-                deal_dicts = [deal.to_dict() for deal in deals]
-                db.set_cached_results(movie.title, self.max_price, deal_dicts, cache_ttl)
-                logger.info(f"Cached {len(deals)} deals for '{movie.title}' (TTL: {cache_ttl}h)")
-            else:
-                logger.info(f"Skipping cache during sale period")
-
+            shopping_deals = self._process_results(movie, results)
+            deals.extend(shopping_deals)
+            logger.info(f"Google Shopping: found {len(shopping_deals)} deals")
         except Exception as e:
-            logger.error(f"Search failed for {movie.title}: {e}")
+            logger.error(f"Google Shopping search failed for {movie.title}: {e}")
+
+        # 2. Search boutique retailer sites directly
+        try:
+            retailer_results = search_boutique_retailers(
+                movie_title=movie.title,
+                year=movie.year,
+                max_price=self.max_price,
+                serpapi_key=self.api_key,
+            )
+            retailer_deals = self._convert_retailer_results(movie, retailer_results)
+            deals.extend(retailer_deals)
+            logger.info(f"Boutique retailers: found {len(retailer_deals)} deals")
+        except Exception as e:
+            logger.error(f"Boutique retailer search failed for {movie.title}: {e}")
+
+        # Deduplicate by URL
+        seen_urls = set()
+        unique_deals = []
+        for deal in deals:
+            if deal.url not in seen_urls:
+                seen_urls.add(deal.url)
+                unique_deals.append(deal)
+        deals = unique_deals
+
+        # Cache the results (if caching is enabled)
+        if cache_ttl > 0 and deals:
+            deal_dicts = [deal.to_dict() for deal in deals]
+            db.set_cached_results(movie.title, self.max_price, deal_dicts, cache_ttl)
+            logger.info(f"Cached {len(deals)} deals for '{movie.title}' (TTL: {cache_ttl}h)")
+        elif cache_ttl == 0:
+            logger.info(f"Skipping cache during sale period")
 
         # Rate limiting (only needed for actual API calls)
         time.sleep(self.request_delay)
 
+        return deals
+
+    def _convert_retailer_results(self, movie: Movie, results: List[RetailerResult]) -> List[Deal]:
+        """Convert RetailerResult objects to Deal objects."""
+        deals = []
+        for r in results:
+            # Skip if no price and we need to filter by price
+            if r.price is None:
+                continue
+
+            deals.append(Deal(
+                movie_title=movie.title,
+                product_title=r.title,
+                price=r.price,
+                retailer=r.retailer,
+                url=r.url,
+                similarity_score=0.9,  # High confidence for direct retailer results
+                matched_example=r.edition_type,
+                thumbnail=r.thumbnail or "",
+            ))
         return deals
 
     def _build_query(self, movie: Movie) -> str:
