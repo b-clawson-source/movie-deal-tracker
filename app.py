@@ -249,6 +249,7 @@ def debug_search():
     """Debug search to see raw results before filtering."""
     from src.edition_classifier import EditionClassifier
     from src.deal_finder import DealFinder
+    from src.retailer_scrapers import search_boutique_retailers
 
     # Verify admin key
     admin_key = os.getenv("ADMIN_KEY", "")
@@ -282,48 +283,67 @@ def debug_search():
 
     query = finder._build_query(movie)
 
-    # Execute raw search
+    # 1. Google Shopping results
+    shopping_analysis = []
     try:
         raw_results = finder._execute_search(query)
         shopping_results = raw_results.get("shopping_results", [])
+
+        for item in shopping_results[:10]:
+            title = item.get("title", "")
+            price_str = item.get("price", "")
+            source = item.get("source", "")
+            price = finder._extract_price(price_str)
+            is_special, confidence, edition_type = classifier.is_special_edition(title)
+            year_valid = True
+            if year:
+                year_valid = finder._validate_year(title, year)
+
+            shopping_analysis.append({
+                "title": title,
+                "price": price,
+                "source": source,
+                "is_special_edition": is_special,
+                "edition_type": edition_type,
+                "year_valid": year_valid,
+                "would_include": is_special and year_valid and price is not None and price <= max_price
+            })
     except Exception as e:
-        return {"error": str(e), "query": query}, 500
+        shopping_analysis = [{"error": str(e)}]
 
-    # Analyze each result
-    analysis = []
-    for item in shopping_results[:10]:  # First 10 results
-        title = item.get("title", "")
-        price_str = item.get("price", "")
-        source = item.get("source", "")
-
-        # Extract price
-        price = finder._extract_price(price_str)
-
-        # Check edition
-        is_special, confidence, edition_type = classifier.is_special_edition(title)
-
-        # Check year
-        year_valid = True
-        if year:
-            year_valid = finder._validate_year(title, year)
-
-        analysis.append({
-            "title": title,
-            "price": price,
-            "price_str": price_str,
-            "source": source,
-            "is_special_edition": is_special,
-            "edition_type": edition_type,
-            "year_valid": year_valid,
-            "would_include": is_special and year_valid and price is not None and price <= max_price
-        })
+    # 2. Boutique retailer results
+    retailer_analysis = []
+    try:
+        retailer_results = search_boutique_retailers(
+            movie_title=movie_title,
+            year=year,
+            max_price=max_price,
+            serpapi_key=serpapi_key,
+        )
+        for r in retailer_results[:15]:
+            retailer_analysis.append({
+                "title": r.title,
+                "price": r.price,
+                "retailer": r.retailer,
+                "edition_type": r.edition_type,
+                "url": r.url,
+                "would_include": r.price is not None and r.price <= max_price
+            })
+    except Exception as e:
+        retailer_analysis = [{"error": str(e)}]
 
     return {
         "query": query,
         "movie": {"title": movie_title, "year": year},
         "max_price": max_price,
-        "total_raw_results": len(shopping_results),
-        "analysis": analysis
+        "google_shopping": {
+            "total_results": len(shopping_analysis),
+            "analysis": shopping_analysis
+        },
+        "boutique_retailers": {
+            "total_results": len(retailer_analysis),
+            "analysis": retailer_analysis
+        }
     }
 
 
