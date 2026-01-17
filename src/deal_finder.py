@@ -108,9 +108,11 @@ class DealFinder:
             logger.error(f"Google Shopping search failed for {movie.title}: {e}")
 
         # 2. Search boutique retailer sites directly
+        # Use same search title as Google Shopping for consistency
+        search_title = movie.get_search_title()
         try:
             retailer_results = search_boutique_retailers(
-                movie_title=movie.title,
+                movie_title=search_title,
                 year=movie.year,
                 max_price=self.max_price,
                 serpapi_key=self.api_key,
@@ -166,12 +168,14 @@ class DealFinder:
     def _build_query(self, movie: Movie) -> str:
         """Build search query for a movie.
 
-        Uses title for search. Year and director are used for result validation
-        rather than in the query since they often don't appear in product titles.
+        Uses best available title for search (may use alternative title for generic names).
+        Year and director are used for result validation rather than in the query
+        since they often don't appear in product titles.
         """
-        # Use just the title - year filtering happens in _process_item
-        # Including year in query is too restrictive (many products omit it)
-        return f'"{movie.title}" blu-ray OR 4K criterion OR arrow OR shout'
+        # Use get_search_title() which prefers alternative titles for generic names
+        # e.g., "Hausu" instead of "House" for the 1977 Japanese film
+        search_title = movie.get_search_title()
+        return f'"{search_title}" blu-ray OR 4K criterion OR arrow OR shout'
 
     def _execute_search(self, query: str) -> Dict[str, Any]:
         """Execute SerpAPI Google Shopping search."""

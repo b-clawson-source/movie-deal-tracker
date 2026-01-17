@@ -139,6 +139,8 @@ def search():
     if request.method == "POST":
         movie_title = request.form.get("movie_title", "").strip()
         max_price_str = request.form.get("max_price", "100")
+        search_title_override = request.form.get("search_title", "").strip()
+        letterboxd_url = request.form.get("letterboxd_url", "").strip()
         searched = True
 
         # Parse max_price
@@ -165,7 +167,7 @@ def search():
                     letterboxd_match = re.match(r'^https?://letterboxd\.com/film/([^/]+)/?$', movie_title)
 
                     if letterboxd_match:
-                        # Fetch movie details from Letterboxd
+                        # Fetch movie details from Letterboxd (including alternative titles)
                         scraper = LetterboxdScraper()
                         movie = Movie(title="", letterboxd_url=movie_title)
                         scraper.fetch_movie_details(movie)
@@ -175,7 +177,20 @@ def search():
                             slug = letterboxd_match.group(1)
                             movie.title = slug.replace("-", " ").title()
 
-                        logger.info(f"Letterboxd lookup: {movie}")
+                        # Use user-selected search title if provided, otherwise use auto-detected
+                        if search_title_override:
+                            # Override the title for searching (user selected from alternatives)
+                            movie.alternative_titles = None  # Clear to prevent auto-selection
+                            original_title = movie.title
+                            movie.title = search_title_override
+                            logger.info(f"Letterboxd lookup: {original_title} ({movie.year}) - user selected '{search_title_override}'")
+                        else:
+                            # Log search title being used
+                            search_title = movie.get_search_title()
+                            if search_title != movie.title:
+                                logger.info(f"Letterboxd lookup: {movie} (searching as '{search_title}')")
+                            else:
+                                logger.info(f"Letterboxd lookup: {movie}")
                     else:
                         # Parse year from title if provided (e.g., "The Thing (1982)" or "The Thing 1982")
                         title = movie_title
@@ -220,6 +235,57 @@ def search():
 def health():
     """Health check endpoint for deployment platforms."""
     return {"status": "ok"}
+
+
+@app.route("/api/movie-details", methods=["POST"])
+def get_movie_details():
+    """Fetch movie details from a Letterboxd URL, including alternative titles."""
+    data = request.get_json() or {}
+    url = data.get("url", "").strip()
+
+    if not url:
+        return {"error": "URL is required"}, 400
+
+    # Validate it's a Letterboxd film URL
+    letterboxd_match = re.match(r'^https?://letterboxd\.com/film/([^/]+)/?$', url)
+    if not letterboxd_match:
+        return {"error": "Invalid Letterboxd film URL"}, 400
+
+    try:
+        scraper = LetterboxdScraper()
+        movie = Movie(title="", letterboxd_url=url)
+        scraper.fetch_movie_details(movie)
+
+        if not movie.title:
+            slug = letterboxd_match.group(1)
+            movie.title = slug.replace("-", " ").title()
+
+        # Build list of title options (original + romanized alternatives)
+        title_options = [{"value": movie.title, "label": movie.title, "recommended": False}]
+
+        if movie.alternative_titles:
+            for alt in movie.alternative_titles:
+                # Only include ASCII-friendly alternatives (good for searching)
+                if alt.isascii() and len(alt) >= 3 and alt.lower() != movie.title.lower():
+                    # Check if this would be the recommended search title
+                    is_recommended = (alt == movie.get_search_title() and alt != movie.title)
+                    title_options.append({
+                        "value": alt,
+                        "label": alt,
+                        "recommended": is_recommended
+                    })
+
+        return {
+            "title": movie.title,
+            "year": movie.year,
+            "director": movie.director,
+            "alternative_titles": movie.alternative_titles,
+            "title_options": title_options,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to fetch movie details: {e}")
+        return {"error": "Failed to fetch movie details"}, 500
 
 
 @app.route("/admin/cache-status")
@@ -271,8 +337,18 @@ def debug_search():
     if not serpapi_key:
         return {"error": "SERPAPI_KEY not configured"}, 500
 
-    # Create movie and build query
-    movie = Movie(title=movie_title, year=year)
+    # Check if input is a Letterboxd URL for the debug endpoint
+    letterboxd_match = re.match(r'^https?://letterboxd\.com/film/([^/]+)/?$', movie_title)
+    if letterboxd_match:
+        scraper = LetterboxdScraper()
+        movie = Movie(title="", letterboxd_url=movie_title)
+        scraper.fetch_movie_details(movie)
+        if not movie.title:
+            slug = letterboxd_match.group(1)
+            movie.title = slug.replace("-", " ").title()
+    else:
+        movie = Movie(title=movie_title, year=year)
+
     classifier = EditionClassifier()
     finder = DealFinder(
         api_key=serpapi_key,
@@ -281,6 +357,8 @@ def debug_search():
         requests_per_minute=30,
     )
 
+    # Get the search title (may use alternative title for generic names)
+    search_title = movie.get_search_title()
     query = finder._build_query(movie)
 
     # 1. Google Shopping results
@@ -311,12 +389,12 @@ def debug_search():
     except Exception as e:
         shopping_analysis = [{"error": str(e)}]
 
-    # 2. Boutique retailer results
+    # 2. Boutique retailer results (use search_title for better specificity)
     retailer_analysis = []
     try:
         retailer_results = search_boutique_retailers(
-            movie_title=movie_title,
-            year=year,
+            movie_title=search_title,
+            year=movie.year,
             max_price=max_price,
             serpapi_key=serpapi_key,
         )
@@ -334,7 +412,12 @@ def debug_search():
 
     return {
         "query": query,
-        "movie": {"title": movie_title, "year": year},
+        "movie": {
+            "title": movie.title,
+            "year": movie.year,
+            "search_title": search_title,
+            "alternative_titles": movie.alternative_titles,
+        },
         "max_price": max_price,
         "google_shopping": {
             "total_results": len(shopping_analysis),

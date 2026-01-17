@@ -320,6 +320,74 @@
             font-size: 0.8rem;
         }
 
+        /* Title Selector */
+        .title-selector {
+            margin-top: 16px;
+            padding: 16px;
+            background: #252c34;
+            border-radius: 8px;
+        }
+
+        .title-selector label {
+            display: block;
+            margin-bottom: 10px;
+            color: #9ab;
+        }
+
+        .title-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .title-option {
+            padding: 8px 14px;
+            background: #1c2228;
+            border: 2px solid #2c3440;
+            border-radius: 6px;
+            color: #9ab;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .title-option:hover {
+            border-color: #40c463;
+            color: #fff;
+        }
+
+        .title-option.selected {
+            background: rgba(64, 196, 99, 0.15);
+            border-color: #40c463;
+            color: #40c463;
+        }
+
+        .title-option .recommended-badge {
+            font-size: 0.7rem;
+            background: #40c463;
+            color: #14181c;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 6px;
+            font-weight: 600;
+        }
+
+        .movie-info {
+            font-size: 0.85rem;
+            color: #678;
+        }
+
+        .movie-info span {
+            margin-right: 12px;
+        }
+
+        .fetching-info {
+            color: #678;
+            font-size: 0.9rem;
+            padding: 8px 0;
+        }
+
         /* Loading */
         .loading {
             display: none;
@@ -399,6 +467,8 @@
             {% endif %}
 
             <form method="POST" id="search-form">
+                <input type="hidden" id="search_title" name="search_title" value="">
+                <input type="hidden" id="letterboxd_url" name="letterboxd_url" value="">
                 <div class="form-row">
                     <input
                         type="text"
@@ -409,8 +479,16 @@
                         required
                         autocomplete="off"
                     >
-                    <button type="submit" class="btn">Search</button>
+                    <button type="submit" class="btn" id="search-btn">Search</button>
                 </div>
+
+                <!-- Title selector (shown when Letterboxd URL has alternative titles) -->
+                <div class="title-selector" id="title-selector" style="display: none;">
+                    <label>Search as:</label>
+                    <div class="title-options" id="title-options"></div>
+                    <div class="movie-info" id="movie-info"></div>
+                </div>
+
                 <div class="price-row">
                     <div class="form-group">
                         <label for="max_price">Max Price</label>
@@ -475,9 +553,141 @@
     </div>
 
     <script>
-        document.getElementById('search-form').addEventListener('submit', function() {
-            document.getElementById('loading').classList.add('active');
+        const movieInput = document.getElementById('movie_title');
+        const searchForm = document.getElementById('search-form');
+        const searchBtn = document.getElementById('search-btn');
+        const titleSelector = document.getElementById('title-selector');
+        const titleOptions = document.getElementById('title-options');
+        const movieInfo = document.getElementById('movie-info');
+        const searchTitleInput = document.getElementById('search_title');
+        const letterboxdUrlInput = document.getElementById('letterboxd_url');
+        const loading = document.getElementById('loading');
+
+        let debounceTimer = null;
+        let currentMovieData = null;
+        let selectedTitle = null;
+
+        // Check if input is a Letterboxd film URL
+        function isLetterboxdUrl(text) {
+            return /^https?:\/\/letterboxd\.com\/film\/[^\/]+\/?$/.test(text.trim());
+        }
+
+        // Fetch movie details from Letterboxd URL
+        async function fetchMovieDetails(url) {
+            titleSelector.style.display = 'block';
+            titleOptions.innerHTML = '<div class="fetching-info">Fetching movie details...</div>';
+            movieInfo.innerHTML = '';
+
+            try {
+                const response = await fetch('/api/movie-details', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    titleOptions.innerHTML = `<div class="fetching-info" style="color: #ff6b6b;">${data.error}</div>`;
+                    return;
+                }
+
+                currentMovieData = data;
+                renderTitleOptions(data);
+
+            } catch (err) {
+                titleOptions.innerHTML = '<div class="fetching-info" style="color: #ff6b6b;">Failed to fetch movie details</div>';
+            }
+        }
+
+        // Render title options
+        function renderTitleOptions(data) {
+            if (!data.title_options || data.title_options.length <= 1) {
+                // No alternatives, just show movie info
+                titleOptions.innerHTML = '';
+                selectedTitle = data.title;
+                searchTitleInput.value = data.title;
+            } else {
+                // Show title options
+                titleOptions.innerHTML = '';
+
+                // Find recommended option or default to first
+                let defaultSelection = data.title_options[0].value;
+                for (const opt of data.title_options) {
+                    if (opt.recommended) {
+                        defaultSelection = opt.value;
+                        break;
+                    }
+                }
+
+                data.title_options.forEach(opt => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'title-option';
+                    if (opt.value === defaultSelection) {
+                        btn.classList.add('selected');
+                        selectedTitle = opt.value;
+                        searchTitleInput.value = opt.value;
+                    }
+
+                    btn.innerHTML = opt.label;
+                    if (opt.recommended) {
+                        btn.innerHTML += '<span class="recommended-badge">Recommended</span>';
+                    }
+
+                    btn.addEventListener('click', () => selectTitle(opt.value));
+                    titleOptions.appendChild(btn);
+                });
+            }
+
+            // Show movie info
+            let infoHtml = '';
+            if (data.year) infoHtml += `<span>${data.year}</span>`;
+            if (data.director) infoHtml += `<span>dir. ${data.director}</span>`;
+            movieInfo.innerHTML = infoHtml;
+
+            letterboxdUrlInput.value = movieInput.value.trim();
+        }
+
+        // Select a title option
+        function selectTitle(title) {
+            selectedTitle = title;
+            searchTitleInput.value = title;
+
+            document.querySelectorAll('.title-option').forEach(btn => {
+                btn.classList.remove('selected');
+                if (btn.textContent.replace('Recommended', '').trim() === title) {
+                    btn.classList.add('selected');
+                }
+            });
+        }
+
+        // Handle input changes
+        movieInput.addEventListener('input', function() {
+            const value = this.value.trim();
+
+            clearTimeout(debounceTimer);
+
+            if (isLetterboxdUrl(value)) {
+                debounceTimer = setTimeout(() => fetchMovieDetails(value), 500);
+            } else {
+                titleSelector.style.display = 'none';
+                currentMovieData = null;
+                selectedTitle = null;
+                searchTitleInput.value = '';
+                letterboxdUrlInput.value = '';
+            }
         });
+
+        // Handle form submit
+        searchForm.addEventListener('submit', function() {
+            loading.classList.add('active');
+        });
+
+        // Check on page load if there's already a Letterboxd URL
+        if (isLetterboxdUrl(movieInput.value)) {
+            fetchMovieDetails(movieInput.value.trim());
+        }
     </script>
 </body>
 </html>

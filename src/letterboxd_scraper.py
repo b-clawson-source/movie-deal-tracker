@@ -19,6 +19,7 @@ class Movie:
     year: Optional[int] = None
     letterboxd_url: Optional[str] = None
     director: Optional[str] = None
+    alternative_titles: Optional[List[str]] = None
 
     def __str__(self) -> str:
         parts = [self.title]
@@ -27,6 +28,35 @@ class Movie:
         if self.director:
             parts.append(f"dir. {self.director}")
         return " - ".join(parts)
+
+    def get_search_title(self) -> str:
+        """
+        Get the best title for searching.
+        For generic English titles, prefer a more specific alternative title
+        (e.g., romanized Japanese title like "Hausu" instead of "House").
+        """
+        if not self.alternative_titles:
+            return self.title
+
+        # Common generic English words that benefit from alternative titles
+        generic_words = {'house', 'ring', 'pulse', 'cure', 'audition', 'mother',
+                        'father', 'brother', 'sister', 'home', 'dark', 'gate'}
+
+        title_lower = self.title.lower()
+
+        # Check if title is generic (single common word or very short)
+        if title_lower in generic_words or len(self.title) <= 5:
+            # Look for a romanized alternative (Latin characters, not the same as title)
+            for alt in self.alternative_titles:
+                # Skip if same as original title
+                if alt.lower() == title_lower:
+                    continue
+                # Prefer romanized titles (ASCII-friendly, good for search)
+                if alt.isascii() and len(alt) >= 3:
+                    logger.debug(f"Using alternative title '{alt}' instead of '{self.title}'")
+                    return alt
+
+        return self.title
 
 
 class LetterboxdScraper:
@@ -186,7 +216,64 @@ class LetterboxdScraper:
             movie.director = director_name
             logger.debug(f"Found director for {movie.title}: {director_name}")
 
+        # Extract alternative titles
+        # Look for the "Alternative Titles" section in the page
+        alt_titles = self._extract_alternative_titles(soup)
+        if alt_titles:
+            movie.alternative_titles = alt_titles
+            logger.debug(f"Found {len(alt_titles)} alternative titles for {movie.title}: {alt_titles[:3]}...")
+
         return movie
+
+    def _extract_alternative_titles(self, soup: BeautifulSoup) -> Optional[List[str]]:
+        """Extract alternative titles from a Letterboxd film page."""
+        alt_titles = []
+
+        # Method 1: Look for "Alternative Titles" section header
+        # The structure is typically: <h3><span>Alternative Titles</span></h3> followed by text
+        alt_header = soup.find('h3', string=lambda s: s and 'Alternative' in s)
+        if not alt_header:
+            # Try finding span inside h3
+            for h3 in soup.find_all('h3'):
+                span = h3.find('span')
+                if span and 'Alternative' in span.get_text():
+                    alt_header = h3
+                    break
+
+        if alt_header:
+            # Get the next sibling or parent's text content
+            # Alternative titles are often in a <p> or text node after the header
+            next_elem = alt_header.find_next_sibling()
+            if next_elem:
+                alt_text = next_elem.get_text(strip=True)
+                if alt_text:
+                    # Split by common delimiters
+                    for title in re.split(r'[,،、]', alt_text):
+                        title = title.strip()
+                        if title and len(title) >= 2:
+                            alt_titles.append(title)
+
+        # Method 2: Look in the tab content for alternative titles
+        # Letterboxd sometimes puts them in a details tab
+        details_section = soup.select_one('.film-details, .tabbed-content')
+        if details_section and not alt_titles:
+            text = details_section.get_text()
+            if 'Alternative' in text:
+                # Find the text after "Alternative Titles"
+                match = re.search(r'Alternative\s+Titles?\s*[:\s]*([^\n]+)', text, re.IGNORECASE)
+                if match:
+                    alt_text = match.group(1)
+                    for title in re.split(r'[,،、]', alt_text):
+                        title = title.strip()
+                        if title and len(title) >= 2:
+                            alt_titles.append(title)
+
+        # Method 3: Check meta tags for alternate names
+        for meta in soup.find_all('meta', attrs={'property': 'og:locale:alternate'}):
+            # Sometimes alternative titles are in locale-specific meta tags
+            pass  # Letterboxd doesn't use this, but kept for potential future use
+
+        return alt_titles if alt_titles else None
 
     def enrich_movies(self, movies: List[Movie], delay: float = 0.5) -> List[Movie]:
         """
