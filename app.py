@@ -212,8 +212,8 @@ def search():
                         requests_per_minute=30,
                     )
 
-                    # Search for deals
-                    deals = finder.search_movie(movie)
+                    # Search for deals (skip cache for on-demand searches so users get fresh results)
+                    deals = finder.search_movie(movie, skip_cache=True)
                     search_desc = str(movie)
                     logger.info(f"Search for {search_desc} (max ${max_price}) found {len(deals)} deals")
 
