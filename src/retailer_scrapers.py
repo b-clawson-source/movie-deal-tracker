@@ -56,6 +56,23 @@ class RetailerScraper(ABC):
             return float(matches[0])
         return None
 
+    def _title_matches(self, product_title: str, search_title: str) -> bool:
+        """Check if the product title contains the search title."""
+        product_lower = product_title.lower()
+        search_lower = search_title.lower()
+
+        # Direct match
+        if search_lower in product_lower:
+            return True
+
+        # Check individual words (for multi-word titles)
+        search_words = search_lower.split()
+        if len(search_words) > 1:
+            # For multi-word titles, require all words to appear
+            return all(word in product_lower for word in search_words)
+
+        return False
+
 
 class VinegarSyndromeScraper(RetailerScraper):
     """Scraper for Vinegar Syndrome (Shopify-based)."""
@@ -508,6 +525,23 @@ class RetailerSearcher:
         self.serpapi_key = serpapi_key
         self.site_searcher = SerpAPISiteSearcher(serpapi_key) if serpapi_key else None
 
+    def _title_matches(self, product_title: str, search_title: str) -> bool:
+        """Check if the product title contains the search title."""
+        product_lower = product_title.lower()
+        search_lower = search_title.lower()
+
+        # Direct match
+        if search_lower in product_lower:
+            return True
+
+        # Check individual words (for multi-word titles)
+        search_words = search_lower.split()
+        if len(search_words) > 1:
+            # For multi-word titles, require all words to appear
+            return all(word in product_lower for word in search_words)
+
+        return False
+
     def search_all(
         self,
         movie_title: str,
@@ -543,6 +577,14 @@ class RetailerSearcher:
                 all_results.extend(site_results)
             except Exception as e:
                 logger.error(f"Error in SerpAPI site search: {e}")
+
+        # Filter results that don't match the search title
+        # This removes featured/popular items that appear when search has no results
+        all_results = [
+            r for r in all_results
+            if self._title_matches(r.title, movie_title)
+        ]
+        logger.info(f"After title filtering: {len(all_results)} results match '{movie_title}'")
 
         # Filter by price if specified
         if max_price is not None:
