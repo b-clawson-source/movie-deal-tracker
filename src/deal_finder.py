@@ -175,7 +175,9 @@ class DealFinder:
         # Use get_search_title() which prefers alternative titles for generic names
         # e.g., "Hausu" instead of "House" for the 1977 Japanese film
         search_title = movie.get_search_title()
-        return f'"{search_title}" blu-ray OR 4K criterion OR arrow OR shout'
+        # Query requires the title AND (blu-ray or 4K) AND a boutique label
+        # Using proper grouping to ensure title is always required
+        return f'"{search_title}" (blu-ray OR 4K) (criterion OR arrow OR "shout factory" OR "vinegar syndrome" OR kino)'
 
     def _execute_search(self, query: str) -> Dict[str, Any]:
         """Execute SerpAPI Google Shopping search."""
