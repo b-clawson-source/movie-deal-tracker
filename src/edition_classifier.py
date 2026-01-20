@@ -4,10 +4,15 @@ Identifies special editions, formats (4K, Blu-ray, DVD), and boutique labels.
 No external API required - fast and free.
 """
 
+from __future__ import annotations
+
 import re
 import logging
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, TYPE_CHECKING
 from dataclasses import dataclass
+
+if TYPE_CHECKING:
+    from .llm_service import OpenAIService
 
 logger = logging.getLogger(__name__)
 
@@ -340,6 +345,47 @@ class EditionClassifier:
             description = result.edition_type
 
         return (result.is_special_edition, result.confidence, description)
+
+    def classify_with_fallback(
+        self,
+        product_title: str,
+        movie_title: str,
+        llm_service: Optional[OpenAIService] = None
+    ) -> ClassificationResult:
+        """
+        Classify using rules first, LLM fallback if confidence < 0.8.
+
+        Args:
+            product_title: The product listing title to classify
+            movie_title: The movie title we're searching for
+            llm_service: Optional ClaudeService for LLM fallback
+
+        Returns:
+            ClassificationResult with details about the edition
+        """
+        result = self.classify(product_title)
+
+        # If high confidence or no LLM service, return rule-based result
+        if result.confidence >= 0.8 or llm_service is None:
+            return result
+
+        # Low confidence - ask LLM for help
+        try:
+            llm_result = llm_service.classify_edition(product_title, movie_title)
+            logger.info(f"LLM fallback for '{product_title[:50]}...': special={llm_result.is_special}")
+
+            # Merge LLM insights with rule-based result
+            return ClassificationResult(
+                is_special_edition=llm_result.is_special,
+                confidence=llm_result.confidence,
+                format=result.format,  # Keep rule-based format detection
+                label=llm_result.label or result.label,
+                edition_type=llm_result.edition_type,
+                reason=f"LLM: {llm_result.reason}"
+            )
+        except Exception as e:
+            logger.warning(f"LLM fallback failed: {e}")
+            return result  # Graceful degradation
 
 
 if __name__ == "__main__":

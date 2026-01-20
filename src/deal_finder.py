@@ -3,11 +3,13 @@ Deal finder using SerpAPI to search for physical movie editions.
 Includes smart caching that respects sale periods.
 """
 
+from __future__ import annotations
+
 import re
 import time
 import logging
 import hashlib
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass, asdict
 from datetime import datetime
 
@@ -18,6 +20,9 @@ from .edition_classifier import EditionClassifier
 from .database import get_db
 from .sale_periods import get_cache_ttl_hours, is_sale_period
 from .retailer_scrapers import search_boutique_retailers, RetailerResult
+
+if TYPE_CHECKING:
+    from .llm_service import OpenAIService
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +64,13 @@ class DealFinder:
         classifier: EditionClassifier,
         max_price: float = 20.0,
         requests_per_minute: int = 30,
+        llm_service: Optional[OpenAIService] = None,
     ):
         self.api_key = api_key
         self.classifier = classifier
         self.max_price = max_price
         self.request_delay = 60.0 / requests_per_minute
+        self.llm_service = llm_service
 
     def search_movie(self, movie: Movie, skip_cache: bool = False) -> List[Deal]:
         """Search for deals on a specific movie.
@@ -96,16 +103,23 @@ class DealFinder:
         deals = []
 
         # 1. Search Google Shopping via SerpAPI
-        query = self._build_query(movie)
-        logger.info(f"Searching Google Shopping: {query}")
+        # Use LLM-expanded queries if available, otherwise use single templated query
+        queries = self._get_search_queries(movie)
+        query = queries[0]  # Keep track of primary query for refinement fallback
 
-        try:
-            results = self._execute_search(query)
-            shopping_deals = self._process_results(movie, results)
-            deals.extend(shopping_deals)
-            logger.info(f"Google Shopping: found {len(shopping_deals)} deals")
-        except Exception as e:
-            logger.error(f"Google Shopping search failed for {movie.title}: {e}")
+        for i, q in enumerate(queries):
+            logger.info(f"Searching Google Shopping ({i+1}/{len(queries)}): {q}")
+            try:
+                results = self._execute_search(q)
+                shopping_deals = self._process_results(movie, results)
+                deals.extend(shopping_deals)
+                logger.info(f"Google Shopping query {i+1}: found {len(shopping_deals)} deals")
+
+                # Rate limiting between queries
+                if i < len(queries) - 1:
+                    time.sleep(self.request_delay)
+            except Exception as e:
+                logger.error(f"Google Shopping search failed for {movie.title} (query {i+1}): {e}")
 
         # 2. Search boutique retailer sites directly
         # Use same search title as Google Shopping for consistency
@@ -126,6 +140,8 @@ class DealFinder:
                 max_price=self.max_price,
                 serpapi_key=self.api_key,
                 alternative_titles=all_titles,
+                llm_service=self.llm_service,
+                director=movie.director,
             )
             retailer_deals = self._convert_retailer_results(movie, retailer_results)
             deals.extend(retailer_deals)
@@ -141,6 +157,18 @@ class DealFinder:
                 seen_urls.add(deal.url)
                 unique_deals.append(deal)
         deals = unique_deals
+
+        # If few results and LLM service available, try refined searches
+        if len(deals) < 2 and self.llm_service:
+            logger.info(f"Few results ({len(deals)}) for '{movie.title}', trying LLM search refinement")
+            refined_deals = self._refine_search_with_llm(movie, deals, query)
+            # Deduplicate refined results
+            for deal in refined_deals:
+                if deal.url not in seen_urls:
+                    seen_urls.add(deal.url)
+                    deals.append(deal)
+            if refined_deals:
+                logger.info(f"LLM refinement added {len(refined_deals)} potential deals for '{movie.title}'")
 
         # Cache the results (if caching is enabled)
         if cache_ttl > 0 and deals:
@@ -192,6 +220,61 @@ class DealFinder:
         # Query requires the title AND (blu-ray or 4K) AND a boutique label
         # Using proper grouping to ensure title is always required
         return f'"{search_title}" (blu-ray OR 4K) (criterion OR arrow OR "shout factory" OR "vinegar syndrome" OR kino)'
+
+    def _get_search_queries(self, movie: Movie) -> List[str]:
+        """Get search queries for a movie, using LLM expansion if available.
+
+        Returns multiple queries when LLM service is configured, otherwise
+        returns a single templated query. Also includes bundle/collection queries.
+        """
+        # Always include the default templated query as fallback
+        default_query = self._build_query(movie)
+
+        if not self.llm_service:
+            return [default_query]
+
+        queries = []
+
+        # 1. Get expanded title queries
+        try:
+            expansion = self.llm_service.generate_search_queries(
+                movie_title=movie.title,
+                year=movie.year,
+                director=movie.director,
+                alternative_titles=movie.alternative_titles,
+            )
+
+            if expansion.queries:
+                logger.info(f"LLM query expansion for '{movie.title}': {len(expansion.queries)} queries")
+                logger.debug(f"Expansion reasoning: {expansion.reasoning}")
+                queries.extend(expansion.queries[:3])  # Limit to 3 title queries
+
+        except Exception as e:
+            logger.warning(f"LLM query expansion failed for '{movie.title}': {e}")
+            queries.append(default_query)
+
+        # 2. Get bundle/collection queries
+        try:
+            bundles = self.llm_service.detect_bundles(
+                movie_title=movie.title,
+                year=movie.year,
+                director=movie.director,
+            )
+
+            if bundles.bundle_queries:
+                logger.info(f"Bundle detection for '{movie.title}': {len(bundles.bundle_queries)} bundles")
+                logger.debug(f"Bundle reasoning: {bundles.reasoning}")
+                queries.extend(bundles.bundle_queries[:2])  # Limit to 2 bundle queries
+
+        except Exception as e:
+            logger.warning(f"LLM bundle detection failed for '{movie.title}': {e}")
+
+        # Ensure we have at least one query
+        if not queries:
+            queries.append(default_query)
+
+        # Limit total queries to control API costs
+        return queries[:5]
 
     def _execute_search(self, query: str) -> Dict[str, Any]:
         """Execute SerpAPI Google Shopping search."""
@@ -247,6 +330,12 @@ class DealFinder:
             logger.debug(f"Year mismatch for '{movie.title}' ({movie.year}): {title}")
             return None
 
+        # LLM title validation for ambiguous cases
+        if self.llm_service and self._is_ambiguous_title(movie, title):
+            if not self._validate_title_with_llm(movie, title):
+                logger.debug(f"LLM rejected title match for '{movie.title}': {title}")
+                return None
+
         # Check if it's a special edition
         is_match, confidence, description = self.classifier.is_special_edition(title)
         if not is_match:
@@ -262,6 +351,62 @@ class DealFinder:
             matched_example=description,
             thumbnail=thumbnail,
         )
+
+    def _is_ambiguous_title(self, movie: Movie, product_title: str) -> bool:
+        """Check if the movie title is ambiguous and needs LLM validation.
+
+        Returns True for:
+        - Short/generic titles (5 chars or less, common words)
+        - Product listings without a year (uncertain which version)
+        - Known problematic titles with remakes
+        """
+        title_lower = movie.title.lower()
+
+        # Generic single words that have multiple films
+        generic_words = {
+            'house', 'ring', 'pulse', 'cure', 'it', 'us', 'them', 'mother',
+            'father', 'home', 'dark', 'gate', 'host', 'thing', 'alien', 'ghost',
+            'crash', 'heat', 'speed', 'dressed', 'psycho', 'carrie', 'suspiria'
+        }
+
+        # Short titles are often ambiguous
+        if len(movie.title) <= 5:
+            return True
+
+        # Known generic words
+        if title_lower in generic_words:
+            return True
+
+        # Product has no year - uncertain which version
+        years_in_product = re.findall(r'\b(19\d{2}|20\d{2})\b', product_title)
+        if not years_in_product and movie.year:
+            return True
+
+        return False
+
+    def _validate_title_with_llm(self, movie: Movie, product_title: str) -> bool:
+        """Use LLM to validate that the product is for the correct movie."""
+        try:
+            result = self.llm_service.validate_movie_match(
+                product_title=product_title,
+                movie_title=movie.title,
+                year=movie.year,
+                director=movie.director,
+                alternative_titles=movie.alternative_titles,
+            )
+
+            # Accept matches with reasonable confidence
+            if result.is_match and result.confidence >= 0.6:
+                logger.debug(f"LLM validated match: {result.reason}")
+                return True
+
+            logger.info(f"LLM rejected match ({result.confidence:.0%}): {result.reason}")
+            return False
+
+        except Exception as e:
+            logger.warning(f"LLM title validation failed: {e}")
+            # On error, give benefit of doubt
+            return True
 
     def _validate_year(self, product_title: str, expected_year: int) -> bool:
         """
@@ -305,6 +450,45 @@ class DealFinder:
         # Use the lowest price found
         prices = [float(m) for m in matches]
         return min(prices)
+
+    def _refine_search_with_llm(
+        self,
+        movie: Movie,
+        current_deals: List[Deal],
+        original_query: str
+    ) -> List[Deal]:
+        """Use LLM to suggest alternative search queries when results are sparse."""
+        if not self.llm_service:
+            return []
+
+        try:
+            suggestions = self.llm_service.suggest_search_refinements(
+                movie_title=movie.title,
+                year=movie.year,
+                current_results=len(current_deals),
+                original_query=original_query
+            )
+
+            additional_deals = []
+            # Limit to 2 refinement queries to control API costs
+            for alt_query in suggestions.alternative_queries[:2]:
+                logger.info(f"Trying refined search: {alt_query}")
+                try:
+                    results = self._execute_search(alt_query)
+                    deals = self._process_results(movie, results)
+                    additional_deals.extend(deals)
+                    logger.info(f"Refined search found {len(deals)} deals")
+
+                    # Rate limiting between refinement searches
+                    time.sleep(self.request_delay)
+                except Exception as e:
+                    logger.warning(f"Refined search failed for query '{alt_query}': {e}")
+
+            return additional_deals
+
+        except Exception as e:
+            logger.warning(f"LLM search refinement failed: {e}")
+            return []  # Graceful degradation
 
     def find_deals(self, movies: List[Movie], skip_cache: bool = False) -> List[Deal]:
         """Search for deals across all movies.

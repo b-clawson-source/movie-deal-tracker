@@ -3,14 +3,19 @@ Direct scrapers for boutique Blu-ray retailer websites.
 Searches retailer sites directly to find special editions that may not appear in Google Shopping.
 """
 
+from __future__ import annotations
+
 import re
 import logging
 import requests
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, quote_plus
+
+if TYPE_CHECKING:
+    from .llm_service import OpenAIService
 
 logger = logging.getLogger(__name__)
 
@@ -433,7 +438,11 @@ class SerpAPISiteSearcher:
 class RetailerSearcher:
     """Searches across multiple boutique retailers."""
 
-    def __init__(self, serpapi_key: Optional[str] = None):
+    def __init__(
+        self,
+        serpapi_key: Optional[str] = None,
+        llm_service: Optional[OpenAIService] = None
+    ):
         self.scrapers: List[RetailerScraper] = [
             VinegarSyndromeScraper(),
             ArrowVideoScraper(),
@@ -442,6 +451,7 @@ class RetailerSearcher:
             DiabolikDVDScraper(),
         ]
         self.serpapi_key = serpapi_key
+        self.llm_service = llm_service
         self.site_searcher = SerpAPISiteSearcher(serpapi_key) if serpapi_key else None
 
     def _title_matches(self, product_title: str, search_title: str, alternative_titles: Optional[List[str]] = None) -> bool:
@@ -494,12 +504,39 @@ class RetailerSearcher:
             return True  # No year in title - include it
         return any(abs(int(y) - year) <= 1 for y in years_in_title)
 
+    def _get_retailer_query(
+        self,
+        movie_title: str,
+        retailer_name: str,
+        year: Optional[int] = None,
+        director: Optional[str] = None
+    ) -> str:
+        """Get optimized query for a specific retailer using LLM if available."""
+        if not self.llm_service:
+            return movie_title
+
+        try:
+            result = self.llm_service.tailor_query_for_retailer(
+                movie_title=movie_title,
+                retailer_name=retailer_name,
+                year=year,
+                director=director,
+            )
+            if result.query:
+                logger.debug(f"LLM retailer query for {retailer_name}: {result.query}")
+                return result.query
+        except Exception as e:
+            logger.warning(f"LLM retailer query failed for {retailer_name}: {e}")
+
+        return movie_title
+
     def search_all(
         self,
         movie_title: str,
         year: Optional[int] = None,
         max_price: Optional[float] = None,
-        alternative_titles: Optional[List[str]] = None
+        alternative_titles: Optional[List[str]] = None,
+        director: Optional[str] = None
     ) -> List[RetailerResult]:
         """
         Search all retailers for a movie.
@@ -509,16 +546,19 @@ class RetailerSearcher:
             year: Optional release year for filtering
             max_price: Optional maximum price filter
             alternative_titles: Optional list of alternative titles to accept
+            director: Optional director name for LLM query optimization
 
         Returns:
             Combined list of results from all retailers
         """
         all_results = []
 
-        # Search direct scrapers
+        # Search direct scrapers with LLM-optimized queries
         for scraper in self.scrapers:
             try:
-                results = scraper.search(movie_title, year)
+                # Get optimized query for this retailer
+                query = self._get_retailer_query(movie_title, scraper.name, year, director)
+                results = scraper.search(query, year)
                 all_results.extend(results)
             except Exception as e:
                 logger.error(f"Error searching {scraper.name}: {e}")
@@ -556,11 +596,13 @@ def search_boutique_retailers(
     year: Optional[int] = None,
     max_price: Optional[float] = None,
     serpapi_key: Optional[str] = None,
-    alternative_titles: Optional[List[str]] = None
+    alternative_titles: Optional[List[str]] = None,
+    llm_service: Optional[OpenAIService] = None,
+    director: Optional[str] = None
 ) -> List[RetailerResult]:
     """Search all boutique retailers for a movie."""
-    searcher = RetailerSearcher(serpapi_key=serpapi_key)
-    return searcher.search_all(movie_title, year, max_price, alternative_titles)
+    searcher = RetailerSearcher(serpapi_key=serpapi_key, llm_service=llm_service)
+    return searcher.search_all(movie_title, year, max_price, alternative_titles, director)
 
 
 if __name__ == "__main__":

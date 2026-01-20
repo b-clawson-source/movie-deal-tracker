@@ -36,6 +36,19 @@ class JobRunner:
         if not self.serpapi_key:
             raise ValueError("SERPAPI_KEY not set in environment")
 
+        # Initialize LLM service (optional - graceful if not configured)
+        self.llm_service = None
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key:
+            try:
+                from .llm_service import OpenAIService
+                self.llm_service = OpenAIService(api_key=openai_key)
+                logger.info("LLM service initialized (OpenAI API available)")
+            except ImportError as e:
+                logger.warning(f"Could not import LLM service: {e}")
+        else:
+            logger.info("LLM service not configured (OPENAI_API_KEY not set)")
+
     def _load_config(self) -> dict:
         """Load configuration."""
         config_path = Path(__file__).parent.parent / "config" / "config.yaml"
@@ -56,6 +69,7 @@ class JobRunner:
             classifier=self.classifier,
             max_price=subscriber.max_price,
             requests_per_minute=self.config["search"]["requests_per_minute"],
+            llm_service=self.llm_service,
         )
 
     def _is_due_for_check(self, subscriber: Subscriber) -> bool:
