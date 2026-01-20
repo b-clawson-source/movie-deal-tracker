@@ -185,11 +185,11 @@ class Database:
                 # Migration: add columns if they don't exist (SQLite)
                 try:
                     cursor.execute("ALTER TABLE subscribers ADD COLUMN max_price REAL DEFAULT 20.0")
-                except:
+                except Exception:
                     pass  # Column already exists
                 try:
                     cursor.execute("ALTER TABLE subscribers ADD COLUMN check_frequency TEXT DEFAULT 'daily'")
-                except:
+                except Exception:
                     pass  # Column already exists
 
                 cursor.execute("""

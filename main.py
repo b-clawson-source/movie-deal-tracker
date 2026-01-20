@@ -174,7 +174,7 @@ def main():
     parser.add_argument(
         "--test-classifier",
         action="store_true",
-        help="Test the OpenAI edition classifier",
+        help="Test the edition classifier",
     )
     parser.add_argument(
         "--test-email",
