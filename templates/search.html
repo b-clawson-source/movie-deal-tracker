@@ -786,7 +786,7 @@
         function selectSuggestion(movie) {
             const titleWithYear = movie.year ? `${movie.title} (${movie.year})` : movie.title;
             movieInput.value = titleWithYear;
-            searchTitleInput.value = movie.title;
+            // Don't set searchTitleInput - it's only for Letterboxd URL overrides
             hideSuggestions();
             // Hide form and show loading
             searchForm.style.display = 'none';
