@@ -44,11 +44,17 @@ class TMDBService:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.session = requests.Session()
-        self.session.headers.update({
-            "Accept": "application/json",
-        })
-        # Use API key as query param (works with standard TMDB API key)
-        self.default_params = {"api_key": api_key}
+        self.session.headers.update({"Accept": "application/json"})
+
+        # Auto-detect auth method: JWT tokens start with 'eyJ', use Bearer auth
+        # Otherwise use api_key query param (standard API key)
+        if api_key.startswith("eyJ"):
+            self.session.headers["Authorization"] = f"Bearer {api_key}"
+            self.default_params = {}
+            logger.debug("TMDB using Bearer token auth")
+        else:
+            self.default_params = {"api_key": api_key}
+            logger.debug("TMDB using API key query param auth")
 
     def search_movies(
         self,
