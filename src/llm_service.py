@@ -63,6 +63,29 @@ class RetailerQueryResult:
     reasoning: str
 
 
+@dataclass
+class MovieSuggestion:
+    """A movie suggestion from LLM interpretation."""
+    title: str
+    year: Optional[int]
+    reason: str
+
+
+@dataclass
+class MovieSuggestionsResult:
+    """Result from LLM movie suggestions."""
+    suggestions: List[MovieSuggestion]
+    interpreted_query: str
+
+
+@dataclass
+class BatchValidationResult:
+    """Result from batch validation of search results."""
+    valid_indices: List[int]
+    invalid_indices: List[int]
+    reasoning: str
+
+
 class OpenAIService:
     """OpenAI API integration for movie deal classification and search refinement."""
 
@@ -614,6 +637,232 @@ REASONING: brief explanation of your choice"""
                 reasoning = line.split(":", 1)[1].strip()
 
         return RetailerQueryResult(query=query, reasoning=reasoning)
+
+    def suggest_movies(self, user_input: str) -> MovieSuggestionsResult:
+        """
+        Interpret user input and suggest matching movies.
+
+        Handles partial input, misspellings, and ambiguous queries.
+        Returns normalized movie titles that can be looked up in TMDB.
+
+        Args:
+            user_input: Partial or complete movie search input
+
+        Returns:
+            MovieSuggestionsResult with suggested movies
+        """
+        cache_key = self._get_cache_key("suggest", user_input.lower())
+        if cache_key in self._cache:
+            logger.debug(f"Cache hit for movie suggestion: {user_input}")
+            return self._cache[cache_key]
+
+        prompt = f"""A user is searching for a movie to find special edition Blu-ray/4K releases.
+Interpret their input and suggest the most likely movies they're looking for.
+
+User input: "{user_input}"
+
+Consider:
+- Partial titles (e.g., "seven sam" → "Seven Samurai")
+- Misspellings (e.g., "shawshank redemtion" → "The Shawshank Redemption")
+- Common nicknames (e.g., "alien 3" → "Alien³")
+- Ambiguous titles - suggest multiple if unclear
+- The user is likely looking for cult classics, horror, sci-fi, or films with boutique releases
+
+Suggest up to 5 movies, prioritizing films that typically have collector's editions.
+
+Respond in this exact format:
+INTERPRETED: what you think they're searching for
+MOVIE1: Title (Year) | brief reason
+MOVIE2: Title (Year) | brief reason
+MOVIE3: Title (Year) | brief reason
+(continue for up to 5 movies)
+
+Example:
+INTERPRETED: The Thing by John Carpenter
+MOVIE1: The Thing (1982) | John Carpenter's sci-fi horror classic, many special editions
+MOVIE2: The Thing from Another World (1951) | Original film, Criterion release available"""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=MINI_MODEL,
+                max_tokens=512,
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            response_text = response.choices[0].message.content
+            result = self._parse_movie_suggestions_response(response_text)
+            self._cache[cache_key] = result
+            logger.info(f"LLM suggested {len(result.suggestions)} movies for '{user_input}'")
+            return result
+
+        except Exception as e:
+            logger.error(f"LLM movie suggestion failed: {e}")
+            raise
+
+    def _parse_movie_suggestions_response(self, response: str) -> MovieSuggestionsResult:
+        """Parse the LLM response into movie suggestions."""
+        import re
+
+        lines = response.strip().split("\n")
+        suggestions = []
+        interpreted = ""
+
+        for line in lines:
+            line = line.strip()
+            if line.startswith("INTERPRETED:"):
+                interpreted = line.split(":", 1)[1].strip()
+            elif line.startswith("MOVIE") and ":" in line:
+                # Parse "Title (Year) | reason" format
+                content = line.split(":", 1)[1].strip()
+                if "|" in content:
+                    title_part, reason = content.split("|", 1)
+                    title_part = title_part.strip()
+                    reason = reason.strip()
+                else:
+                    title_part = content
+                    reason = ""
+
+                # Extract year from "Title (Year)"
+                year_match = re.search(r'\((\d{4})\)$', title_part)
+                if year_match:
+                    year = int(year_match.group(1))
+                    title = title_part[:year_match.start()].strip()
+                else:
+                    year = None
+                    title = title_part
+
+                if title:
+                    suggestions.append(MovieSuggestion(
+                        title=title,
+                        year=year,
+                        reason=reason
+                    ))
+
+        return MovieSuggestionsResult(
+            suggestions=suggestions,
+            interpreted_query=interpreted
+        )
+
+    def batch_validate_results(
+        self,
+        movie_title: str,
+        year: Optional[int],
+        director: Optional[str],
+        product_titles: List[str]
+    ) -> BatchValidationResult:
+        """
+        Validate a batch of search results against the target movie.
+
+        More efficient than individual validation for post-search filtering.
+
+        Args:
+            movie_title: Target movie title
+            year: Target movie year
+            director: Target movie director
+            product_titles: List of product listing titles to validate
+
+        Returns:
+            BatchValidationResult with indices of valid/invalid results
+        """
+        if not product_titles:
+            return BatchValidationResult(
+                valid_indices=[],
+                invalid_indices=[],
+                reasoning="No products to validate"
+            )
+
+        cache_key = self._get_cache_key(
+            "batch_validate",
+            movie_title,
+            year,
+            hash(tuple(product_titles[:10]))  # Cache based on first 10 products
+        )
+        if cache_key in self._cache:
+            logger.debug(f"Cache hit for batch validation: {movie_title}")
+            return self._cache[cache_key]
+
+        year_info = f" ({year})" if year else ""
+        director_info = f"Director: {director}" if director else ""
+
+        # Format product list with indices
+        products_list = "\n".join(
+            f"{i}: {title}" for i, title in enumerate(product_titles)
+        )
+
+        prompt = f"""Validate which of these product listings are for the correct movie.
+
+TARGET MOVIE:
+Title: {movie_title}{year_info}
+{director_info}
+
+PRODUCT LISTINGS:
+{products_list}
+
+For each product, determine if it's for the target movie (not a different film with similar name, wrong year's version, or unrelated product).
+
+Respond in this exact format:
+VALID: comma-separated indices of matching products (e.g., 0, 2, 3, 5)
+INVALID: comma-separated indices of non-matching products (e.g., 1, 4)
+REASONING: brief explanation of any rejections"""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=MINI_MODEL,
+                max_tokens=512,
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            response_text = response.choices[0].message.content
+            result = self._parse_batch_validation_response(response_text, len(product_titles))
+            self._cache[cache_key] = result
+            logger.info(f"Batch validation: {len(result.valid_indices)} valid, {len(result.invalid_indices)} invalid")
+            return result
+
+        except Exception as e:
+            logger.error(f"LLM batch validation failed: {e}")
+            raise
+
+    def _parse_batch_validation_response(
+        self,
+        response: str,
+        total_count: int
+    ) -> BatchValidationResult:
+        """Parse the LLM response into batch validation result."""
+        lines = response.strip().split("\n")
+        valid_indices = []
+        invalid_indices = []
+        reasoning = ""
+
+        for line in lines:
+            line = line.strip()
+            if line.startswith("VALID:"):
+                indices_str = line.split(":", 1)[1].strip()
+                if indices_str and indices_str.lower() != "none":
+                    for idx in indices_str.split(","):
+                        try:
+                            valid_indices.append(int(idx.strip()))
+                        except ValueError:
+                            pass
+            elif line.startswith("INVALID:"):
+                indices_str = line.split(":", 1)[1].strip()
+                if indices_str and indices_str.lower() != "none":
+                    for idx in indices_str.split(","):
+                        try:
+                            invalid_indices.append(int(idx.strip()))
+                        except ValueError:
+                            pass
+            elif line.startswith("REASONING:"):
+                reasoning = line.split(":", 1)[1].strip()
+
+        # Validate indices are in range
+        valid_indices = [i for i in valid_indices if 0 <= i < total_count]
+        invalid_indices = [i for i in invalid_indices if 0 <= i < total_count]
+
+        return BatchValidationResult(
+            valid_indices=valid_indices,
+            invalid_indices=invalid_indices,
+            reasoning=reasoning
+        )
 
     def clear_cache(self):
         """Clear the in-memory cache."""

@@ -312,6 +312,99 @@ def get_movie_details():
         return {"error": "Failed to fetch movie details"}, 500
 
 
+@app.route("/api/movie-suggestions", methods=["POST"])
+def get_movie_suggestions():
+    """
+    Get movie suggestions based on partial/ambiguous user input.
+    Uses LLM to interpret input and TMDB to fetch movie details with thumbnails.
+    """
+    data = request.get_json() or {}
+    query = data.get("query", "").strip()
+
+    if not query or len(query) < 2:
+        return {"suggestions": []}, 200
+
+    suggestions = []
+
+    # Try LLM-powered suggestions if available
+    openai_key = os.getenv("OPENAI_API_KEY")
+    tmdb_key = os.getenv("TMDB_API_KEY")
+
+    if openai_key and tmdb_key:
+        try:
+            from src.llm_service import OpenAIService
+            from src.tmdb_service import TMDBService
+
+            llm = OpenAIService(api_key=openai_key)
+            tmdb = TMDBService(api_key=tmdb_key)
+
+            # Get LLM movie suggestions
+            llm_result = llm.suggest_movies(query)
+
+            # Enrich with TMDB data (thumbnails)
+            for suggestion in llm_result.suggestions[:5]:
+                tmdb_results = tmdb.search_movies(
+                    suggestion.title,
+                    year=suggestion.year,
+                    limit=1
+                )
+
+                if tmdb_results:
+                    movie = tmdb_results[0]
+                    suggestions.append({
+                        "title": movie.title,
+                        "year": movie.year,
+                        "poster_url": movie.poster_url,
+                        "overview": movie.overview[:100] + "..." if len(movie.overview) > 100 else movie.overview,
+                        "reason": suggestion.reason,
+                        "tmdb_id": movie.id,
+                    })
+                else:
+                    # Include LLM suggestion even without TMDB match
+                    suggestions.append({
+                        "title": suggestion.title,
+                        "year": suggestion.year,
+                        "poster_url": None,
+                        "overview": "",
+                        "reason": suggestion.reason,
+                        "tmdb_id": None,
+                    })
+
+            return {
+                "suggestions": suggestions,
+                "interpreted": llm_result.interpreted_query,
+            }, 200
+
+        except Exception as e:
+            logger.warning(f"LLM movie suggestions failed: {e}")
+            # Fall through to TMDB-only search
+
+    # Fallback: TMDB-only search (no LLM)
+    if tmdb_key:
+        try:
+            from src.tmdb_service import TMDBService
+            tmdb = TMDBService(api_key=tmdb_key)
+
+            tmdb_results = tmdb.search_movies(query, limit=5)
+            for movie in tmdb_results:
+                suggestions.append({
+                    "title": movie.title,
+                    "year": movie.year,
+                    "poster_url": movie.poster_url,
+                    "overview": movie.overview[:100] + "..." if len(movie.overview) > 100 else movie.overview,
+                    "reason": "",
+                    "tmdb_id": movie.id,
+                })
+
+            return {"suggestions": suggestions}, 200
+
+        except Exception as e:
+            logger.warning(f"TMDB search failed: {e}")
+
+    # No suggestions available
+    return {"suggestions": []}, 200
+
+
 @app.route("/admin/cache-status")
 def cache_status():
     """Get cache status and sale period info."""

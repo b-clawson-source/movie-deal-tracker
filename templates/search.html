@@ -388,6 +388,118 @@
             padding: 8px 0;
         }
 
+        /* Movie Suggestions Dropdown */
+        .suggestions-container {
+            position: relative;
+        }
+
+        .suggestions-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #1c2228;
+            border: 1px solid #2c3440;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 320px;
+            overflow-y: auto;
+            z-index: 100;
+            display: none;
+        }
+
+        .suggestions-dropdown.active {
+            display: block;
+        }
+
+        .suggestion-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #2c3440;
+            transition: background 0.15s;
+        }
+
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .suggestion-item:hover,
+        .suggestion-item.active {
+            background: #252c34;
+        }
+
+        .suggestion-poster {
+            width: 40px;
+            height: 60px;
+            border-radius: 4px;
+            overflow: hidden;
+            background: #14181c;
+            flex-shrink: 0;
+        }
+
+        .suggestion-poster img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .suggestion-poster-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #456;
+            font-size: 0.6rem;
+        }
+
+        .suggestion-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .suggestion-title {
+            color: #fff;
+            font-weight: 500;
+            font-size: 0.95rem;
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .suggestion-year {
+            color: #678;
+            font-size: 0.8rem;
+        }
+
+        .suggestion-overview {
+            color: #9ab;
+            font-size: 0.75rem;
+            margin-top: 2px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .suggestions-loading {
+            padding: 16px;
+            text-align: center;
+            color: #678;
+            font-size: 0.85rem;
+        }
+
+        .suggestions-empty {
+            padding: 16px;
+            text-align: center;
+            color: #678;
+            font-size: 0.85rem;
+        }
+
         /* Loading */
         .loading {
             display: none;
@@ -470,15 +582,18 @@
                 <input type="hidden" id="search_title" name="search_title" value="">
                 <input type="hidden" id="letterboxd_url" name="letterboxd_url" value="">
                 <div class="form-row">
-                    <input
-                        type="text"
-                        id="movie_title"
-                        name="movie_title"
-                        placeholder="Title, year, or Letterboxd URL"
-                        value="{{ movie_title }}"
-                        required
-                        autocomplete="off"
-                    >
+                    <div class="suggestions-container">
+                        <input
+                            type="text"
+                            id="movie_title"
+                            name="movie_title"
+                            placeholder="Title, year, or Letterboxd URL"
+                            value="{{ movie_title }}"
+                            required
+                            autocomplete="off"
+                        >
+                        <div class="suggestions-dropdown" id="suggestions-dropdown"></div>
+                    </div>
                     <button type="submit" class="btn" id="search-btn">Search</button>
                 </div>
 
@@ -562,18 +677,118 @@
         const searchTitleInput = document.getElementById('search_title');
         const letterboxdUrlInput = document.getElementById('letterboxd_url');
         const loading = document.getElementById('loading');
+        const suggestionsDropdown = document.getElementById('suggestions-dropdown');
 
         let debounceTimer = null;
+        let suggestionsTimer = null;
         let currentMovieData = null;
         let selectedTitle = null;
+        let lastSuggestionsQuery = '';
 
         // Check if input is a Letterboxd film URL
         function isLetterboxdUrl(text) {
             return /^https?:\/\/letterboxd\.com\/film\/[^\/]+\/?$/.test(text.trim());
         }
 
+        // Fetch movie suggestions from API
+        async function fetchMovieSuggestions(query) {
+            if (query.length < 2) {
+                hideSuggestions();
+                return;
+            }
+
+            // Don't refetch if same query
+            if (query === lastSuggestionsQuery) {
+                return;
+            }
+            lastSuggestionsQuery = query;
+
+            // Show loading state
+            suggestionsDropdown.innerHTML = '<div class="suggestions-loading">Finding movies...</div>';
+            suggestionsDropdown.classList.add('active');
+
+            try {
+                const response = await fetch('/api/movie-suggestions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query })
+                });
+
+                const data = await response.json();
+
+                // Check if input changed while fetching
+                if (movieInput.value.trim() !== query) {
+                    return;
+                }
+
+                if (data.error) {
+                    suggestionsDropdown.innerHTML = '<div class="suggestions-empty">No suggestions found</div>';
+                    return;
+                }
+
+                renderSuggestions(data.suggestions || []);
+
+            } catch (err) {
+                console.error('Failed to fetch suggestions:', err);
+                hideSuggestions();
+            }
+        }
+
+        // Render movie suggestions
+        function renderSuggestions(suggestions) {
+            if (!suggestions || suggestions.length === 0) {
+                suggestionsDropdown.innerHTML = '<div class="suggestions-empty">No movies found</div>';
+                return;
+            }
+
+            suggestionsDropdown.innerHTML = '';
+
+            suggestions.forEach(movie => {
+                const item = document.createElement('div');
+                item.className = 'suggestion-item';
+
+                const posterHtml = movie.poster_url
+                    ? `<img src="${movie.poster_url}" alt="${movie.title}" loading="lazy">`
+                    : '<div class="suggestion-poster-placeholder">No poster</div>';
+
+                const yearHtml = movie.year ? `<div class="suggestion-year">${movie.year}</div>` : '';
+                const overviewHtml = movie.overview ? `<div class="suggestion-overview">${movie.overview}</div>` : '';
+
+                item.innerHTML = `
+                    <div class="suggestion-poster">${posterHtml}</div>
+                    <div class="suggestion-info">
+                        <div class="suggestion-title">${movie.title}</div>
+                        ${yearHtml}
+                        ${overviewHtml}
+                    </div>
+                `;
+
+                item.addEventListener('click', () => selectSuggestion(movie));
+                suggestionsDropdown.appendChild(item);
+            });
+
+            suggestionsDropdown.classList.add('active');
+        }
+
+        // Select a suggestion
+        function selectSuggestion(movie) {
+            const titleWithYear = movie.year ? `${movie.title} (${movie.year})` : movie.title;
+            movieInput.value = titleWithYear;
+            searchTitleInput.value = movie.title;
+            hideSuggestions();
+            movieInput.focus();
+        }
+
+        // Hide suggestions dropdown
+        function hideSuggestions() {
+            suggestionsDropdown.classList.remove('active');
+            suggestionsDropdown.innerHTML = '';
+            lastSuggestionsQuery = '';
+        }
+
         // Fetch movie details from Letterboxd URL
         async function fetchMovieDetails(url) {
+            hideSuggestions();
             titleSelector.style.display = 'block';
             titleOptions.innerHTML = '<div class="fetching-info">Fetching movie details...</div>';
             movieInfo.innerHTML = '';
@@ -667,8 +882,10 @@
             const value = this.value.trim();
 
             clearTimeout(debounceTimer);
+            clearTimeout(suggestionsTimer);
 
             if (isLetterboxdUrl(value)) {
+                hideSuggestions();
                 debounceTimer = setTimeout(() => fetchMovieDetails(value), 500);
             } else {
                 titleSelector.style.display = 'none';
@@ -676,11 +893,67 @@
                 selectedTitle = null;
                 searchTitleInput.value = '';
                 letterboxdUrlInput.value = '';
+
+                // Fetch movie suggestions with debounce
+                if (value.length >= 2) {
+                    suggestionsTimer = setTimeout(() => fetchMovieSuggestions(value), 300);
+                } else {
+                    hideSuggestions();
+                }
+            }
+        });
+
+        // Handle focus - show suggestions if we have a query
+        movieInput.addEventListener('focus', function() {
+            const value = this.value.trim();
+            if (value.length >= 2 && !isLetterboxdUrl(value) && suggestionsDropdown.children.length > 0) {
+                suggestionsDropdown.classList.add('active');
+            }
+        });
+
+        // Handle clicks outside to close dropdown
+        document.addEventListener('click', function(e) {
+            if (!movieInput.contains(e.target) && !suggestionsDropdown.contains(e.target)) {
+                suggestionsDropdown.classList.remove('active');
+            }
+        });
+
+        // Handle keyboard navigation
+        movieInput.addEventListener('keydown', function(e) {
+            if (!suggestionsDropdown.classList.contains('active')) return;
+
+            const items = suggestionsDropdown.querySelectorAll('.suggestion-item');
+            if (items.length === 0) return;
+
+            const activeItem = suggestionsDropdown.querySelector('.suggestion-item:hover, .suggestion-item.active');
+            let activeIndex = -1;
+            items.forEach((item, i) => {
+                if (item.classList.contains('active')) activeIndex = i;
+            });
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                items.forEach(item => item.classList.remove('active'));
+                const nextIndex = activeIndex < items.length - 1 ? activeIndex + 1 : 0;
+                items[nextIndex].classList.add('active');
+                items[nextIndex].scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                items.forEach(item => item.classList.remove('active'));
+                const prevIndex = activeIndex > 0 ? activeIndex - 1 : items.length - 1;
+                items[prevIndex].classList.add('active');
+                items[prevIndex].scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'Enter' && activeIndex >= 0) {
+                e.preventDefault();
+                items[activeIndex].click();
+            } else if (e.key === 'Escape') {
+                hideSuggestions();
             }
         });
 
         // Handle form submit
         searchForm.addEventListener('submit', function() {
+            hideSuggestions();
             loading.classList.add('active');
         });
 

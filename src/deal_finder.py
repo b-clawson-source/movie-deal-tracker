@@ -170,6 +170,10 @@ class DealFinder:
             if refined_deals:
                 logger.info(f"LLM refinement added {len(refined_deals)} potential deals for '{movie.title}'")
 
+        # Post-search batch validation - verify all results are for the correct movie
+        if deals and self.llm_service:
+            deals = self._batch_validate_results(movie, deals)
+
         # Cache the results (if caching is enabled)
         if cache_ttl > 0 and deals:
             deal_dicts = [deal.to_dict() for deal in deals]
@@ -407,6 +411,47 @@ class DealFinder:
             logger.warning(f"LLM title validation failed: {e}")
             # On error, give benefit of doubt
             return True
+
+    def _batch_validate_results(self, movie: Movie, deals: List[Deal]) -> List[Deal]:
+        """
+        Batch validate all search results using LLM.
+
+        More efficient than individual validation, filters out results
+        that don't match the target movie.
+        """
+        if not deals or not self.llm_service:
+            return deals
+
+        try:
+            # Extract product titles for validation
+            product_titles = [deal.product_title for deal in deals]
+
+            result = self.llm_service.batch_validate_results(
+                movie_title=movie.title,
+                year=movie.year,
+                director=movie.director,
+                product_titles=product_titles
+            )
+
+            # Filter to only valid results
+            valid_deals = [
+                deals[i] for i in result.valid_indices
+                if i < len(deals)
+            ]
+
+            removed_count = len(deals) - len(valid_deals)
+            if removed_count > 0:
+                logger.info(
+                    f"Batch validation removed {removed_count} results for '{movie.title}': "
+                    f"{result.reasoning}"
+                )
+
+            return valid_deals
+
+        except Exception as e:
+            logger.warning(f"Batch validation failed: {e}")
+            # On error, return all deals (benefit of doubt)
+            return deals
 
     def _validate_year(self, product_title: str, expected_year: int) -> bool:
         """
