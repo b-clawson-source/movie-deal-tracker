@@ -788,8 +788,11 @@
             movieInput.value = titleWithYear;
             searchTitleInput.value = movie.title;
             hideSuggestions();
-            // Auto-submit the search
+            // Hide form and show loading
+            searchForm.style.display = 'none';
             loading.classList.add('active');
+            // Update loading text with movie title
+            document.querySelector('.loading-text').textContent = `Searching for "${movie.title}"...`;
             searchForm.submit();
         }
 
@@ -968,7 +971,13 @@
         // Handle form submit
         searchForm.addEventListener('submit', function() {
             hideSuggestions();
+            searchForm.style.display = 'none';
             loading.classList.add('active');
+            // Update loading text with search query
+            const query = movieInput.value.trim();
+            if (query) {
+                document.querySelector('.loading-text').textContent = `Searching for "${query}"...`;
+            }
         });
 
         // Check on page load if there's already a Letterboxd URL
