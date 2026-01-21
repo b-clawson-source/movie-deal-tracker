@@ -229,11 +229,20 @@ def search():
 
                     # Initialize classifier and deal finder
                     classifier = EditionClassifier()
+
+                    # Initialize LLM service for batch validation (optional)
+                    llm_service = None
+                    openai_key = os.getenv("OPENAI_API_KEY")
+                    if openai_key:
+                        from src.llm_service import OpenAIService
+                        llm_service = OpenAIService(api_key=openai_key)
+
                     finder = DealFinder(
                         api_key=serpapi_key,
                         classifier=classifier,
                         max_price=max_price,
                         requests_per_minute=30,
+                        llm_service=llm_service,
                     )
 
                     # Search for deals (skip cache for on-demand searches so users get fresh results)
@@ -471,11 +480,20 @@ def debug_search():
             movie = Movie(title=movie_title, year=year)
 
     classifier = EditionClassifier()
+
+    # Initialize LLM service for batch validation (optional)
+    llm_service = None
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key:
+        from src.llm_service import OpenAIService
+        llm_service = OpenAIService(api_key=openai_key)
+
     finder = DealFinder(
         api_key=serpapi_key,
         classifier=classifier,
         max_price=max_price,
         requests_per_minute=30,
+        llm_service=llm_service,
     )
 
     # Get the search title (may use alternative title for generic names)

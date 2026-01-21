@@ -789,7 +789,7 @@ MOVIE2: The Thing from Another World (1951) | Original film, Criterion release a
             f"{i}: {title}" for i, title in enumerate(product_titles)
         )
 
-        prompt = f"""Validate which of these product listings are for the correct movie.
+        prompt = f"""Validate which of these product listings are for the EXACT movie specified.
 
 TARGET MOVIE:
 Title: {movie_title}{year_info}
@@ -798,12 +798,17 @@ Title: {movie_title}{year_info}
 PRODUCT LISTINGS:
 {products_list}
 
-For each product, determine if it's for the target movie (not a different film with similar name, wrong year's version, or unrelated product).
+STRICT VALIDATION RULES:
+- The product MUST be for the exact movie title specified, not a sequel, prequel, reboot, or different film in the same franchise
+- For franchises (Spider-Man, Batman, Star Wars, etc.), match ONLY the specific film - "Spider-Man (2002)" is NOT "Spider-Man 2", "The Amazing Spider-Man", or "Spider-Man: Homecoming"
+- Year must match if specified - a 2002 film is NOT a 2012 reboot
+- Multi-packs or collections only count if they include the target film
+- When in doubt, mark as INVALID
 
 Respond in this exact format:
-VALID: comma-separated indices of matching products (e.g., 0, 2, 3, 5)
+VALID: comma-separated indices of matching products (e.g., 0, 2, 3, 5) or "none" if no matches
 INVALID: comma-separated indices of non-matching products (e.g., 1, 4)
-REASONING: brief explanation of any rejections"""
+REASONING: brief explanation of rejections"""
 
         try:
             response = self.client.chat.completions.create(
