@@ -251,7 +251,8 @@ def search():
                     logger.info(f"Search for {search_desc} (max ${max_price}) found {len(deals)} deals")
 
                 except Exception as e:
-                    logger.error(f"Search failed: {e}")
+                    import traceback
+                    logger.error(f"Search failed: {e}\n{traceback.format_exc()}")
                     error = "Search failed. Please try again."
 
     return render_template(
