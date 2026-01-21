@@ -791,9 +791,9 @@
             // Hide form and show loading
             searchForm.style.display = 'none';
             loading.classList.add('active');
-            // Update loading text with movie title
             document.querySelector('.loading-text').textContent = `Searching for "${movie.title}"...`;
-            searchForm.submit();
+            // Small delay to let UI update before navigation
+            setTimeout(() => searchForm.submit(), 50);
         }
 
         // Hide suggestions dropdown
