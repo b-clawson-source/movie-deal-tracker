@@ -181,12 +181,15 @@ class JobRunner:
             logger.error(f"Failed to process subscriber {subscriber.email}: {e}")
             return {"status": "error", "message": str(e), "subscriber": subscriber.email}
 
-    def run_all_subscribers(self, force: bool = False, resend: bool = False):
+    def run_all_subscribers(self, force: bool = False, resend: bool = False) -> tuple:
         """Process all active subscribers.
 
         Args:
             force: If True, bypass frequency check and process all subscribers
             resend: If True, send all deals (not just new ones)
+
+        Returns:
+            Tuple of (subscribers_processed, total_deals_found)
         """
         self._resend_mode = resend
         subscribers = self.db.get_active_subscribers()
@@ -194,6 +197,7 @@ class JobRunner:
 
         processed = 0
         skipped = 0
+        total_deals = 0
 
         for subscriber in subscribers:
             # Check if subscriber is due for a check based on their frequency
@@ -203,15 +207,21 @@ class JobRunner:
                 continue
 
             try:
-                self._process_subscriber(subscriber)
+                deals_found = self._process_subscriber(subscriber)
                 processed += 1
+                total_deals += deals_found
             except Exception as e:
                 logger.error(f"Failed to process subscriber {subscriber.email}: {e}")
 
-        logger.info(f"Finished processing subscribers: {processed} processed, {skipped} skipped")
+        logger.info(f"Finished processing subscribers: {processed} processed, {skipped} skipped, {total_deals} deals")
+        return processed, total_deals
 
-    def _process_subscriber(self, subscriber: Subscriber):
-        """Process a single subscriber."""
+    def _process_subscriber(self, subscriber: Subscriber) -> int:
+        """Process a single subscriber.
+
+        Returns:
+            Number of deals found
+        """
         logger.info(f"Processing subscriber: {subscriber.email} (max: ${subscriber.max_price}, freq: {subscriber.check_frequency})")
 
         # Get movies from their list
@@ -220,11 +230,11 @@ class JobRunner:
             logger.info(f"Found {len(movies)} movies in list for {subscriber.email}")
         except Exception as e:
             logger.error(f"Failed to scrape list for {subscriber.email}: {e}")
-            return
+            return 0
 
         if not movies:
             logger.warning(f"No movies found in list for {subscriber.email}")
-            return
+            return 0
 
         # Create finder with subscriber's price preference
         finder = self._create_finder_for_subscriber(subscriber)
@@ -248,6 +258,8 @@ class JobRunner:
         # Update last checked timestamp
         self.db.update_last_checked(subscriber.id)
 
+        return len(all_deals)
+
     def _send_notification(self, subscriber: Subscriber, deals: list):
         """Send deal notification to subscriber."""
         logger.info(f"Sending notification to {subscriber.email} with {len(deals)} deals")
@@ -269,18 +281,47 @@ class JobRunner:
 
 
 def run_job():
-    """Entry point for running the job."""
+    """Entry point for running the job.
+
+    This function is called by the scheduler. It wraps all operations
+    in try/except to ensure the scheduler keeps running even if a job fails.
+    """
     from .database import get_db
 
     logger.info("Starting deal check job...")
-
-    # Clean up expired cache entries
     db = get_db()
-    db.clear_expired_cache()
 
-    runner = JobRunner()
-    runner.run_all_subscribers()
-    logger.info("Deal check job complete!")
+    # Record job start
+    job_id = db.record_job_start("deal_check")
+
+    try:
+        # Clean up expired cache entries
+        db.clear_expired_cache()
+
+        runner = JobRunner()
+        processed, deals = runner.run_all_subscribers()
+
+        # Record successful completion
+        db.record_job_complete(
+            job_id,
+            status="success",
+            message="Job completed successfully",
+            subscribers_processed=processed,
+            deals_found=deals
+        )
+        logger.info("Deal check job complete!")
+
+    except Exception as e:
+        # Log the error but don't re-raise - we want the scheduler to keep running
+        logger.exception(f"Deal check job failed with error: {e}")
+
+        # Record failure
+        db.record_job_complete(
+            job_id,
+            status="failed",
+            message=str(e)[:500]  # Truncate long error messages
+        )
+        logger.info("Job failed but scheduler will continue for next run")
 
 
 if __name__ == "__main__":

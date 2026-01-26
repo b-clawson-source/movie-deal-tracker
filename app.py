@@ -272,8 +272,19 @@ def search():
 
 @app.route("/health")
 def health():
-    """Health check endpoint for deployment platforms."""
-    return {"status": "ok"}
+    """Health check endpoint for deployment platforms.
+
+    Returns basic health info plus last job status for monitoring.
+    """
+    db = get_db()
+    last_job = db.get_last_job_status("deal_check")
+
+    response = {
+        "status": "ok",
+        "last_job": last_job
+    }
+
+    return jsonify(response)
 
 
 @app.route("/api/movie-details", methods=["POST"])

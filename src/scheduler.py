@@ -45,7 +45,7 @@ class DealScheduler:
 
         trigger = CronTrigger(hour=hour, minute=minute)
         self.scheduler.add_job(
-            self.job_func,
+            self._safe_run_job,
             trigger=trigger,
             id="deal_check",
             name="Daily deal check",
@@ -63,7 +63,7 @@ class DealScheduler:
         """
         trigger = IntervalTrigger(hours=hours)
         self.scheduler.add_job(
-            self.job_func,
+            self._safe_run_job,
             trigger=trigger,
             id="deal_check",
             name=f"Deal check every {hours} hours",
@@ -75,7 +75,15 @@ class DealScheduler:
     def run_now(self):
         """Run the job immediately (once)."""
         logger.info("Running deal check now...")
-        self.job_func()
+        self._safe_run_job()
+
+    def _safe_run_job(self):
+        """Run job with exception handling to prevent scheduler death."""
+        try:
+            self.job_func()
+        except Exception as e:
+            logger.exception(f"Job execution failed: {e}")
+            logger.info("Scheduler will continue running despite job failure")
 
     def start(self, run_immediately: bool = False):
         """

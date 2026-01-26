@@ -167,6 +167,25 @@ class Database:
                     CREATE INDEX IF NOT EXISTS idx_search_cache_expires
                     ON search_cache(expires_at)
                 """)
+
+                # Job status table for monitoring scheduled jobs
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS job_status (
+                        id SERIAL PRIMARY KEY,
+                        job_name TEXT NOT NULL,
+                        started_at TIMESTAMP NOT NULL,
+                        finished_at TIMESTAMP,
+                        status TEXT NOT NULL,
+                        message TEXT,
+                        subscribers_processed INTEGER DEFAULT 0,
+                        deals_found INTEGER DEFAULT 0
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_job_status_name
+                    ON job_status(job_name)
+                """)
             else:
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS subscribers (
@@ -232,6 +251,25 @@ class Database:
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_search_cache_expires
                     ON search_cache(expires_at)
+                """)
+
+                # Job status table for monitoring scheduled jobs
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS job_status (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        job_name TEXT NOT NULL,
+                        started_at TEXT NOT NULL,
+                        finished_at TEXT,
+                        status TEXT NOT NULL,
+                        message TEXT,
+                        subscribers_processed INTEGER DEFAULT 0,
+                        deals_found INTEGER DEFAULT 0
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_job_status_name
+                    ON job_status(job_name)
                 """)
 
             conn.commit()
@@ -712,6 +750,112 @@ class Database:
         except Exception as e:
             logger.error(f"Failed to get cache stats: {e}")
             return {"error": str(e)}
+        finally:
+            conn.close()
+
+    # ===== Job Status Methods =====
+
+    def record_job_start(self, job_name: str = "deal_check") -> int:
+        """
+        Record that a job has started.
+
+        Returns:
+            Job ID for updating status later
+        """
+        now = datetime.now().isoformat()
+        p = self._placeholder()
+
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            if self.use_postgres:
+                cursor.execute(f"""
+                    INSERT INTO job_status (job_name, started_at, status)
+                    VALUES ({p}, {p}, 'running')
+                    RETURNING id
+                """, (job_name, now))
+                job_id = cursor.fetchone()[0]
+            else:
+                cursor.execute(f"""
+                    INSERT INTO job_status (job_name, started_at, status)
+                    VALUES ({p}, {p}, 'running')
+                """, (job_name, now))
+                job_id = cursor.lastrowid
+            conn.commit()
+            logger.info(f"Job {job_name} started (id={job_id})")
+            return job_id
+        except Exception as e:
+            logger.error(f"Failed to record job start: {e}")
+            conn.rollback()
+            return -1
+        finally:
+            conn.close()
+
+    def record_job_complete(
+        self,
+        job_id: int,
+        status: str = "success",
+        message: str = None,
+        subscribers_processed: int = 0,
+        deals_found: int = 0
+    ):
+        """Record that a job has completed."""
+        now = datetime.now().isoformat()
+        p = self._placeholder()
+
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(f"""
+                UPDATE job_status
+                SET finished_at = {p}, status = {p}, message = {p},
+                    subscribers_processed = {p}, deals_found = {p}
+                WHERE id = {p}
+            """, (now, status, message, subscribers_processed, deals_found, job_id))
+            conn.commit()
+            logger.info(f"Job {job_id} completed with status '{status}'")
+        except Exception as e:
+            logger.error(f"Failed to record job complete: {e}")
+            conn.rollback()
+        finally:
+            conn.close()
+
+    def get_last_job_status(self, job_name: str = "deal_check") -> Optional[Dict[str, Any]]:
+        """Get the most recent job status."""
+        p = self._placeholder()
+
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(f"""
+                SELECT id, job_name, started_at, finished_at, status, message,
+                       subscribers_processed, deals_found
+                FROM job_status
+                WHERE job_name = {p}
+                ORDER BY started_at DESC
+                LIMIT 1
+            """, (job_name,))
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            if self.use_postgres:
+                return {
+                    "id": row[0],
+                    "job_name": row[1],
+                    "started_at": row[2],
+                    "finished_at": row[3],
+                    "status": row[4],
+                    "message": row[5],
+                    "subscribers_processed": row[6],
+                    "deals_found": row[7],
+                }
+            else:
+                return dict(row)
+        except Exception as e:
+            logger.error(f"Failed to get last job status: {e}")
+            return None
         finally:
             conn.close()
 
